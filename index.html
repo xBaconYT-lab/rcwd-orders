@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>RCWD Jersey 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&family=Teko:wght@500;600&display=swap" rel="stylesheet">
+<script src="config.js"></script>
+<style>
+  :root {
+    --bg: #eef5f1;
+    --surface: #ffffff;
+    --ink: #12332b;
+    --muted: #5b776d;
+    --line: #d3e3da;
+    --accent: #2f8f6b;
+    --accent-ink: #ffffff;
+    --accent-soft: #dcefe6;
+    --danger: #b4413a;
+    --danger-soft: #f8e1de;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1a16;
+      --surface: #15261f;
+      --ink: #e4f1ea;
+      --muted: #9cb8ac;
+      --line: #27443a;
+      --accent: #5cc9a0;
+      --accent-ink: #0e1a16;
+      --accent-soft: #1c3a30;
+      --danger: #f08a80;
+      --danger-soft: #3a1e1b;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 400 16px/1.55 'Prompt', system-ui, sans-serif;
+  }
+  button, input { font: inherit; color: inherit; }
+  a { color: var(--accent); }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+  [hidden] { display: none !important; }
+
+  .num { font-family: 'Teko', 'Prompt', sans-serif; font-weight: 600; letter-spacing: 0.02em; line-height: 1; }
+
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 24px 16px 48px; }
+  @media (min-width: 720px) { .wrap { padding: 40px 32px 64px; } }
+
+  /* ---------- wordmark ---------- */
+  .mark { display: flex; align-items: baseline; gap: 10px; margin: 0; }
+  .mark .num { font-size: 44px; color: var(--accent); }
+  .mark span:last-child { font-size: 18px; font-weight: 600; }
+  .mark small { display: block; font-size: 14px; font-weight: 400; color: var(--muted); }
+
+  /* ---------- login ---------- */
+  .login { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
+  .login form {
+    width: 100%; max-width: 360px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    padding: 28px 24px 24px;
+  }
+  .login .mark { margin-bottom: 4px; }
+  .login p.lead { margin: 0 0 22px; color: var(--muted); font-size: 15px; }
+  .field { display: block; margin-bottom: 14px; }
+  .field span { display: block; font-size: 14px; font-weight: 500; margin-bottom: 6px; }
+  .field input {
+    width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg);
+  }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 10px 16px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--surface); cursor: pointer; font-weight: 500; text-decoration: none; color: var(--ink);
+    white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn.primary:hover { filter: brightness(1.06); }
+  .btn[disabled] { opacity: 0.6; cursor: progress; }
+  .login .btn.primary { width: 100%; margin-top: 6px; padding: 12px 16px; }
+  .error { color: var(--danger); font-size: 14px; margin: 12px 0 0; min-height: 1.4em; }
+  .setup-note { margin: 18px 0 0; font-size: 14px; color: var(--muted); }
+
+  /* ---------- dashboard header ---------- */
+  .top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+  .top-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* category switch: the two big choices */
+  .switch { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+  @media (min-width: 720px) { .switch { grid-template-columns: 220px 220px; } }
+  .switch button {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; border-radius: var(--radius); border: 1px solid var(--line);
+    background: var(--surface); cursor: pointer; text-align: left;
+  }
+  .switch button span:first-child { font-size: 18px; font-weight: 600; }
+  .switch button .num { font-size: 34px; color: var(--muted); }
+  .switch button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+  .switch button[aria-pressed="true"] .num { color: var(--accent); }
+
+  /* filters */
+  .filters {
+    display: grid; gap: 12px; align-items: end;
+    grid-template-columns: 1fr 1fr;
+    margin-bottom: 18px;
+  }
+  .filters .field { margin: 0; }
+  .filters .search { grid-column: 1 / -1; }
+  .filters .actions { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; }
+  @media (min-width: 860px) {
+    .filters { grid-template-columns: 170px 170px 1fr auto; }
+    .filters .search { grid-column: auto; }
+    .filters .actions { grid-column: auto; }
+  }
+  .filters input { padding: 9px 10px; background: var(--surface); }
+
+  /* panel with size run + list */
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+
+  .run { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+  .run div { padding: 14px 18px 12px; border-right: 1px solid var(--line); min-width: 76px; }
+  .run div:last-child { border-right: 0; margin-left: auto; background: var(--accent-soft); }
+  .run dt { font-size: 13px; color: var(--muted); font-weight: 500; }
+  .run dd { margin: 4px 0 0; font-size: 34px; }
+  .run div.zero dd { color: var(--muted); opacity: 0.55; }
+
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  th {
+    text-align: left; font-size: 13px; font-weight: 500; color: var(--muted);
+    padding: 10px 14px; border-bottom: 1px solid var(--line); white-space: nowrap;
+  }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  tr:last-child td { border-bottom: 0; }
+  td.idx { color: var(--muted); width: 1%; white-space: nowrap; }
+  td.when { color: var(--muted); white-space: nowrap; font-size: 14px; }
+  td.size span {
+    display: inline-block; min-width: 44px; text-align: center;
+    padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; font-weight: 600; font-size: 14px;
+  }
+  /* the back of the jersey: name over a big number */
+  td.back-name { font-weight: 600; letter-spacing: 0.06em; }
+  td.back-number .num { font-size: 30px; display: inline-block; min-width: 2ch; }
+  td.flag { color: var(--danger); }
+  td.flag .hint { display: block; font-size: 12px; font-weight: 400; letter-spacing: 0; }
+  td.wrapcell { min-width: 140px; }
+  td.nowrap { white-space: nowrap; }
+
+  .empty { padding: 40px 20px; text-align: center; color: var(--muted); }
+  .empty .btn { margin-top: 12px; }
+
+  .foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; margin-top: 14px; font-size: 14px; color: var(--muted); }
+  .foot button { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; }
+
+  .loading { min-height: 100vh; display: grid; place-items: center; color: var(--muted); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .switch button, .btn { transition: border-color 0.15s, background-color 0.15s; }
+  }
+</style>
+</head>
+<body>
+
+<div class="loading" id="loading">กำลังโหลด…</div>
+
+<main class="login" id="login" hidden>
+  <form id="login-form" autocomplete="on">
+    <h1 class="mark"><span class="num">RCWD</span><span>Jersey 2026</span></h1>
+    <p class="lead">รายการสั่งเสื้อและหมวกของราชาวดี สำหรับทีมงาน</p>
+    <label class="field">
+      <span>ชื่อผู้ใช้</span>
+      <input name="username" autocomplete="username" required autocapitalize="off" spellcheck="false">
+    </label>
+    <label class="field">
+      <span>รหัสผ่าน</span>
+      <input name="password" type="password" autocomplete="current-password" required>
+    </label>
+    <button class="btn primary" type="submit">เข้าสู่ระบบ</button>
+    <p class="error" id="login-error" role="alert"></p>
+    <p class="setup-note" id="setup-note" hidden>
+      หน้านี้ยังไม่ได้เชื่อมกับ Google Sheet ใส่ลิงก์ Web app ของ Apps Script ใน config.js ก่อน
+      หรือ <a href="?demo">ดูตัวอย่างด้วยข้อมูลสมมติ</a>
+    </p>
+  </form>
+</main>
+
+<div class="wrap" id="app" hidden>
+  <header class="top">
+    <h1 class="mark">
+      <span class="num">RCWD</span>
+      <span>Jersey 2026<small id="subtitle">รายการที่สลิปผ่านแล้ว</small></span>
+    </h1>
+    <div class="top-actions">
+      <a class="btn" id="sheet-link" target="_blank" rel="noopener" hidden>เปิด Google Sheet</a>
+      <button class="btn" id="logout" type="button">ออกจากระบบ</button>
+    </div>
+  </header>
+
+  <div class="switch" role="group" aria-label="เลือกหมวด">
+    <button type="button" data-view="shirts" aria-pressed="true"><span>เสื้อ</span><span class="num" id="count-shirts">0</span></button>
+    <button type="button" data-view="caps" aria-pressed="false"><span>หมวก</span><span class="num" id="count-caps">0</span></button>
+  </div>
+
+  <div class="filters">
+    <label class="field"><span>ตั้งแต่วันที่</span><input type="date" id="from"></label>
+    <label class="field"><span>ถึงวันที่</span><input type="date" id="to"></label>
+    <label class="field search"><span>ค้นหา</span><input type="search" id="q" placeholder="ชื่อหลังเสื้อ หรือเลข"></label>
+    <div class="actions">
+      <button class="btn" type="button" id="clear-dates" hidden>ล้างวันที่</button>
+      <button class="btn primary" type="button" id="export">ดาวน์โหลด Excel</button>
+    </div>
+  </div>
+
+  <section class="panel" aria-live="polite">
+    <dl class="run" id="run"></dl>
+    <div class="table-scroll">
+      <table>
+        <thead id="thead"></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="empty" hidden>
+      <p id="empty-text">ยังไม่มีออเดอร์</p>
+      <button class="btn" type="button" id="empty-reset" hidden>ดูทุกวันที่</button>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <span id="updated"></span>
+    <button type="button" id="refresh">ดึงข้อมูลล่าสุด</button>
+  </footer>
+</div>
+
+<script>
+(() => {
+  const API_URL = String(window.RCWD_API_URL || '').trim();
+  const DEMO = new URLSearchParams(location.search).has('demo');
+  const AUTH_KEY = 'rcwd-auth';
+  const XLSX_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+
+  const state = { data: null, view: 'shirts', from: '', to: '', q: '' };
+  const $ = id => document.getElementById(id);
+
+  // ---------- helpers ----------
+  const tz = 'Asia/Bangkok';
+  const dayKeyFmt = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' });
+  const shortFmt = new Intl.DateTimeFormat('th-TH-u-ca-gregory', { timeZone: tz, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const fullFmt = new Intl.DateTimeFormat('en-GB', { timeZone: tz, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const timeFmt = new Intl.DateTimeFormat('th-TH-u-ca-gregory', { timeZone: tz, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const dayKey = iso => dayKeyFmt.format(new Date(iso));
+
+  function el(tag, props, children) {
+    const node = document.createElement(tag);
+    if (props) {
+      for (const [k, v] of Object.entries(props)) {
+        if (v === undefined || v === null) continue;
+        if (k === 'class') node.className = v;
+        else if (k === 'text') node.textContent = v;
+        else node.setAttribute(k, v);
+      }
+    }
+    (children || []).forEach(c => { if (c !== null && c !== undefined) node.append(c); });
+    return node;
+  }
+
+  const safeLink = url => /^https:\/\/(drive|docs)\.google\.com\//.test(String(url || '')) ? url : '';
+  const badName = n => String(n || '').length > 8;
+  const badNumber = n => !/^\d{1,3}$/.test(String(n || ''));
+
+  // ---------- data ----------
+  async function fetchData(username, password) {
+    if (DEMO) return demoData();
+    if (!API_URL) throw Object.assign(new Error('หน้านี้ยังไม่ได้เชื่อมกับ Google Sheet'), { setup: true });
+    let res;
+    try {
+      res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ username, password }) });
+    } catch (e) {
+      throw new Error('เชื่อมต่อไม่ได้ เช็กอินเทอร์เน็ตแล้วลองใหม่');
+    }
+    if (!res.ok) throw new Error('Google Sheet ตอบกลับผิดพลาด (HTTP ' + res.status + ')');
+    let json;
+    try { json = await res.json(); } catch (e) { throw new Error('ข้อมูลที่ได้กลับมาอ่านไม่ได้ ลองใหม่อีกครั้ง'); }
+    if (!json.ok) throw Object.assign(new Error(json.error || 'ดึงข้อมูลไม่สำเร็จ'), { auth: true });
+    return json;
+  }
+
+  function demoData() {
+    const names = ['TEST', 'DEMO', 'SAMPLE', 'RCWD', 'GREEN', 'HOUSE', 'TEAM', 'CHEER', 'DRUM', 'FLAG', 'STAND', 'PARADE', 'VERYLONGNAME', 'BLUE'];
+    const sizes = ['M', 'L', 'S', 'XL', 'M', '2XL', 'L', 'M', 'S', 'M', '3XL', 'L', 'M', 'XL'];
+    const day = d => new Date(Date.UTC(2026, 9, d, 4 + (d % 5), 10 + d)).toISOString();
+    const shirts = names.map((n, i) => ({
+      time: day(3 + (i % 5)), size: sizes[i], name: n, number: i === 5 ? '1234' : String((i * 7) % 99).padStart(i % 4 === 0 ? 2 : 1, '0'),
+      piece: 1, slip: '',
+    }));
+    const caps = ['ตัวอย่าง หนึ่ง', 'ตัวอย่าง สอง', 'ตัวอย่าง สาม', 'ตัวอย่าง สี่', 'ตัวอย่าง ห้า'].map((n, i) => ({
+      time: day(4 + i % 4), name: n, grade: 'ม.' + (i + 1), room: String(i + 2), phone: '0800000' + String(100 + i),
+      social: '@demo' + (i + 1), product: i % 2 ? 'หมวก RCWD' : 'RCWD Jersey + หมวก RCWD', slip: '',
+    }));
+    return Promise.resolve({ ok: true, demo: true, updatedAt: new Date().toISOString(), sheetUrl: '', onlyVerified: true,
+      sizes: ['S', 'M', 'L', 'XL', '2XL', '3XL'], shirts, caps });
+  }
+
+  // ---------- views ----------
+  function show(view) {
+    $('loading').hidden = view !== 'loading';
+    $('login').hidden = view !== 'login';
+    $('app').hidden = view !== 'app';
+  }
+
+  function inRange(row) {
+    const d = dayKey(row.time);
+    return (!state.from || d >= state.from) && (!state.to || d <= state.to);
+  }
+
+  function matches(row) {
+    if (!state.q) return true;
+    const q = state.q.toLowerCase();
+    const hay = state.view === 'shirts'
+      ? [row.name, row.number, row.size]
+      : [row.name, row.phone, row.social, row.grade, row.room, row.product];
+    return hay.some(v => String(v || '').toLowerCase().includes(q));
+  }
+
+  const columns = {
+    shirts: [
+      { label: 'ลำดับ' }, { label: 'Size' }, { label: 'ชื่อหลังเสื้อ' }, { label: 'เลขหลังเสื้อ' },
+      { label: 'วันที่สั่ง' }, { label: 'สลิป' },
+    ],
+    caps: [
+      { label: 'ลำดับ' }, { label: 'ชื่อ' }, { label: 'ชั้น' }, { label: 'ห้อง' }, { label: 'เบอร์ติดต่อ' },
+      { label: 'IG / Line' }, { label: 'สินค้าที่สั่ง' }, { label: 'วันที่สั่ง' }, { label: 'สลิป' },
+    ],
+  };
+
+  function slipCell(row) {
+    const url = safeLink(row.slip);
+    return el('td', { class: 'nowrap' }, [
+      url ? el('a', { href: url, target: '_blank', rel: 'noopener', text: 'ดูสลิป', title: 'เปิดใน Google Drive (ต้องใช้บัญชีเจ้าของฟอร์ม)' })
+          : el('span', { text: 'ไม่มีสลิป', style: 'color: var(--muted)' }),
+    ]);
+  }
+
+  function shirtRow(row, i) {
+    const nameBad = badName(row.name);
+    const numberBad = badNumber(row.number);
+    return el('tr', null, [
+      el('td', { class: 'idx', text: String(i + 1) }),
+      el('td', { class: 'size' }, [el('span', { text: row.size || '-' })]),
+      el('td', { class: 'back-name' + (nameBad ? ' flag' : '') }, [
+        row.name || '-',
+        nameBad ? el('span', { class: 'hint', text: 'เกิน 8 ตัวอักษร' }) : null,
+      ]),
+      el('td', { class: 'back-number' + (numberBad ? ' flag' : '') }, [
+        el('span', { class: 'num', text: row.number || '-' }),
+        numberBad ? el('span', { class: 'hint', text: 'ต้องเป็นตัวเลข 1-3 หลัก' }) : null,
+      ]),
+      el('td', { class: 'when', text: shortFmt.format(new Date(row.time)) }),
+      slipCell(row),
+    ]);
+  }
+
+  function capRow(row, i) {
+    return el('tr', null, [
+      el('td', { class: 'idx', text: String(i + 1) }),
+      el('td', { class: 'wrapcell', text: row.name }),
+      el('td', { class: 'nowrap', text: row.grade }),
+      el('td', { text: row.room }),
+      el('td', { class: 'nowrap', text: row.phone }),
+      el('td', { text: row.social }),
+      el('td', { class: 'wrapcell', text: row.product }),
+      el('td', { class: 'when', text: shortFmt.format(new Date(row.time)) }),
+      slipCell(row),
+    ]);
+  }
+
+  function runItem(label, value, extraClass) {
+    return el('div', { class: (value === 0 ? 'zero ' : '') + (extraClass || '') }, [
+      el('dt', { text: label }),
+      el('dd', { class: 'num', text: String(value) }),
+    ]);
+  }
+
+  function summary(rows) {
+    if (state.view === 'shirts') {
+      const sizes = (state.data.sizes || []).slice();
+      rows.forEach(r => { if (r.size && sizes.indexOf(r.size) === -1) sizes.push(r.size); });
+      const items = sizes.map(s => [s, rows.filter(r => r.size === s).length]);
+      return { items, total: ['รวม (ตัว)', rows.length] };
+    }
+    const withShirt = rows.filter(r => /jersey|เสื้อ/i.test(r.product)).length;
+    return {
+      items: [['สั่งคู่กับเสื้อ', withShirt], ['หมวกอย่างเดียว', rows.length - withShirt]],
+      total: ['รวม (ใบ)', rows.length],
+    };
+  }
+
+  function render() {
+    const d = state.data;
+    const dated = { shirts: d.shirts.filter(inRange), caps: d.caps.filter(inRange) };
+    const rows = dated[state.view];
+    const shown = rows.filter(matches);
+
+    $('count-shirts').textContent = dated.shirts.length;
+    $('count-caps').textContent = dated.caps.length;
+    document.querySelectorAll('.switch button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === state.view)));
+    $('q').placeholder = state.view === 'shirts' ? 'ชื่อหลังเสื้อ หรือเลข' : 'ชื่อ เบอร์ IG หรือห้อง';
+    $('clear-dates').hidden = !state.from && !state.to;
+
+    const unit = state.view === 'shirts' ? 'ตัว' : 'ใบ';
+    const exportBtn = $('export');
+    exportBtn.textContent = 'ดาวน์โหลด Excel (' + rows.length + ' ' + unit + ')';
+    exportBtn.disabled = rows.length === 0;
+
+    const s = summary(rows);
+    $('run').replaceChildren(...s.items.map(([k, v]) => runItem(k, v)), runItem(s.total[0], s.total[1], 'total'));
+
+    $('thead').replaceChildren(el('tr', null, columns[state.view].map(c => el('th', { scope: 'col', text: c.label }))));
+    const make = state.view === 'shirts' ? shirtRow : capRow;
+    $('tbody').replaceChildren(...shown.map(make));
+
+    const empty = shown.length === 0;
+    $('empty').hidden = !empty;
+    if (empty) {
+      const hasRange = state.from || state.to;
+      $('empty-text').textContent = state.q
+        ? 'ไม่พบ "' + state.q + '" ในรายการนี้'
+        : hasRange ? 'ไม่มีออเดอร์ในช่วงวันที่นี้' : 'ยังไม่มีออเดอร์ที่สลิปผ่าน';
+      $('empty-reset').hidden = !hasRange || !!state.q;
+    }
+
+    $('subtitle').textContent = d.demo ? 'ตัวอย่างข้อมูลสมมติ' : (d.onlyVerified ? 'รายการที่สลิปผ่านแล้ว' : 'ทุกรายการ');
+    $('updated').textContent = 'อัปเดตล่าสุด ' + timeFmt.format(new Date(d.updatedAt));
+    const link = safeLink(d.sheetUrl);
+    $('sheet-link').hidden = !link;
+    if (link) $('sheet-link').href = link;
+  }
+
+  // ---------- Excel ----------
+  function loadXLSX() {
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = XLSX_SRC;
+      s.onload = () => resolve(window.XLSX);
+      s.onerror = () => reject(new Error('โหลดตัวสร้างไฟล์ Excel ไม่ได้ ลองใหม่อีกครั้ง'));
+      document.head.append(s);
+    });
+  }
+
+  async function exportExcel() {
+    const btn = $('export');
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'กำลังสร้างไฟล์…';
+    try {
+      const XLSX = await loadXLSX();
+      const rows = state.data[state.view].filter(inRange);
+      const when = r => fullFmt.format(new Date(r.time)).replace(',', '');
+      let header, body, widths, sheetName;
+      if (state.view === 'shirts') {
+        sheetName = 'เสื้อ';
+        header = ['ลำดับ', 'Size', 'ชื่อหลังเสื้อ', 'เลขหลังเสื้อ', 'วันที่สั่ง', 'ลิงก์สลิป'];
+        body = rows.map((r, i) => [i + 1, r.size, r.name, String(r.number || ''), when(r), safeLink(r.slip)]);
+        widths = [7, 8, 18, 12, 18, 45];
+      } else {
+        sheetName = 'หมวก';
+        header = ['ลำดับ', 'ชื่อ', 'ชั้น', 'ห้อง', 'เบอร์ติดต่อ', 'IG / Line', 'สินค้าที่สั่ง', 'วันที่สั่ง', 'ลิงก์สลิป'];
+        body = rows.map((r, i) => [i + 1, r.name, r.grade, String(r.room || ''), String(r.phone || ''), r.social, r.product, when(r), safeLink(r.slip)]);
+        widths = [7, 26, 10, 6, 14, 20, 26, 18, 45];
+      }
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet([header].concat(body));
+      ws['!cols'] = widths.map(w => ({ wch: w }));
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+
+      const s = summary(rows);
+      const sum = XLSX.utils.aoa_to_sheet([[state.view === 'shirts' ? 'Size' : 'รายการ', 'จำนวน']].concat(s.items, [s.total]));
+      sum['!cols'] = [{ wch: 16 }, { wch: 10 }];
+      XLSX.utils.book_append_sheet(wb, sum, 'สรุป');
+
+      const range = state.from || state.to ? (state.from || 'เริ่ม') + '_ถึง_' + (state.to || 'ล่าสุด') : 'ทั้งหมด';
+      XLSX.writeFile(wb, 'RCWD-' + sheetName + '-' + range + '.xlsx');
+    } catch (e) {
+      alert(e.message || 'สร้างไฟล์ไม่สำเร็จ');
+    } finally {
+      btn.textContent = label;
+      btn.disabled = false;
+      render();
+    }
+  }
+
+  // ---------- auth ----------
+  function saved() {
+    try { return JSON.parse(sessionStorage.getItem(AUTH_KEY) || 'null'); } catch (e) { return null; }
+  }
+  function remember(auth) {
+    try { auth ? sessionStorage.setItem(AUTH_KEY, JSON.stringify(auth)) : sessionStorage.removeItem(AUTH_KEY); } catch (e) { /* private mode */ }
+  }
+
+  async function load(auth) {
+    state.data = await fetchData(auth.username, auth.password);
+    state.auth = auth;
+    remember(auth);
+    show('app');
+    render();
+  }
+
+  function showLogin(message, setup) {
+    remember(null);
+    state.auth = null;
+    $('login-error').textContent = message || '';
+    $('setup-note').hidden = !setup && !!API_URL;
+    show('login');
+  }
+
+  $('login-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const f = e.target;
+    const user = f.querySelector('[name="username"]');
+    const pass = f.querySelector('[name="password"]');
+    const btn = f.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.textContent = 'กำลังเข้าสู่ระบบ…';
+    $('login-error').textContent = '';
+    try {
+      await load({ username: user.value.trim(), password: pass.value });
+      pass.value = '';
+    } catch (err) {
+      $('login-error').textContent = err.message;
+      $('setup-note').hidden = !err.setup && !!API_URL;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'เข้าสู่ระบบ';
+    }
+  });
+
+  $('logout').addEventListener('click', () => showLogin(''));
+
+  $('refresh').addEventListener('click', async () => {
+    const b = $('refresh');
+    b.disabled = true;
+    b.textContent = 'กำลังดึงข้อมูล…';
+    try {
+      await load(state.auth || {});
+    } catch (err) {
+      if (err.auth) showLogin(err.message); else alert(err.message);
+    } finally {
+      b.disabled = false;
+      b.textContent = 'ดึงข้อมูลล่าสุด';
+    }
+  });
+
+  // ---------- controls ----------
+  document.querySelectorAll('.switch button').forEach(b => b.addEventListener('click', () => {
+    state.view = b.dataset.view;
+    render();
+  }));
+  $('from').addEventListener('change', e => { state.from = e.target.value; render(); });
+  $('to').addEventListener('change', e => { state.to = e.target.value; render(); });
+  $('q').addEventListener('input', e => { state.q = e.target.value.trim(); render(); });
+  const clearDates = () => { state.from = state.to = ''; $('from').value = $('to').value = ''; render(); };
+  $('clear-dates').addEventListener('click', clearDates);
+  $('empty-reset').addEventListener('click', clearDates);
+  $('export').addEventListener('click', exportExcel);
+
+  // ---------- start ----------
+  (async () => {
+    const auth = DEMO ? {} : saved();
+    if (!auth) return showLogin('', !API_URL);
+    try {
+      await load(auth);
+    } catch (err) {
+      showLogin(err.auth || err.setup ? err.message : '', err.setup);
+    }
+  })();
+})();
+</script>
+</body>
+</html>
