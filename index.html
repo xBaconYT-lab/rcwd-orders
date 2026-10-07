@@ -264,7 +264,9 @@
   const shortFmt = new Intl.DateTimeFormat('th-TH-u-ca-gregory', { timeZone: tz, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   const fullFmt = new Intl.DateTimeFormat('en-GB', { timeZone: tz, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   const timeFmt = new Intl.DateTimeFormat('th-TH-u-ca-gregory', { timeZone: tz, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  const dayKey = iso => dayKeyFmt.format(new Date(iso));
+  const toDate = iso => { const t = new Date(iso); return iso && !isNaN(t) ? t : null; };
+  const dayKey = iso => { const t = toDate(iso); return t ? dayKeyFmt.format(t) : ''; };
+  const shortDate = iso => { const t = toDate(iso); return t ? shortFmt.format(t) : '-'; };
 
   function el(tag, props, children) {
     const node = document.createElement(tag);
@@ -325,7 +327,9 @@
   }
 
   function inRange(row) {
+    if (!state.from && !state.to) return true;
     const d = dayKey(row.time);
+    if (!d) return false;
     return (!state.from || d >= state.from) && (!state.to || d <= state.to);
   }
 
@@ -371,7 +375,7 @@
         el('span', { class: 'num', text: row.number || '-' }),
         numberBad ? el('span', { class: 'hint', text: 'ต้องเป็นตัวเลข 1-3 หลัก' }) : null,
       ]),
-      el('td', { class: 'when', text: shortFmt.format(new Date(row.time)) }),
+      el('td', { class: 'when', text: shortDate(row.time) }),
       slipCell(row),
     ]);
   }
@@ -385,7 +389,7 @@
       el('td', { class: 'nowrap', text: row.phone }),
       el('td', { text: row.social }),
       el('td', { class: 'wrapcell', text: row.product }),
-      el('td', { class: 'when', text: shortFmt.format(new Date(row.time)) }),
+      el('td', { class: 'when', text: shortDate(row.time) }),
       slipCell(row),
     ]);
   }
@@ -472,7 +476,7 @@
     try {
       const XLSX = await loadXLSX();
       const rows = state.data[state.view].filter(inRange);
-      const when = r => fullFmt.format(new Date(r.time)).replace(',', '');
+      const when = r => { const t = toDate(r.time); return t ? fullFmt.format(t).replace(',', '') : ''; };
       let header, body, widths, sheetName;
       if (state.view === 'shirts') {
         sheetName = 'เสื้อ';
