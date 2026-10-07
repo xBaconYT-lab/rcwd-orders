@@ -70,6 +70,7 @@
   }
   .login .mark { margin-bottom: 4px; }
   .login p.lead { margin: 0 0 22px; color: var(--muted); font-size: 15px; }
+  .nowrap { white-space: nowrap; }
   .field { display: block; margin-bottom: 14px; }
   .field span { display: block; font-size: 14px; font-weight: 500; margin-bottom: 6px; }
   .field input {
@@ -183,7 +184,7 @@
 <main class="login" id="login" hidden>
   <form id="login-form" autocomplete="on">
     <h1 class="mark"><span class="num">RCWD</span><span>Jersey 2026</span></h1>
-    <p class="lead">รายการสั่งเสื้อและหมวกของราชาวดี สำหรับทีมงาน</p>
+    <p class="lead">รายการสั่งเสื้อและหมวกของราชาวดี <span class="nowrap">สำหรับทีมงาน</span></p>
     <label class="field">
       <span>ชื่อผู้ใช้</span>
       <input name="username" autocomplete="username" required autocapitalize="off" spellcheck="false">
