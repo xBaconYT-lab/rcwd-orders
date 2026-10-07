@@ -166,6 +166,27 @@
     border: 1px dashed var(--line); border-radius: 999px;
   }
   td.nowrap { white-space: nowrap; }
+  td.qty .num { font-size: 26px; }
+
+  /* จัดส่ง: ชื่อผู้รับ + เบอร์, ที่อยู่กับรายการตัดบรรทัด */
+  td.who { min-width: 150px; }
+  td.who strong { font-weight: 600; display: block; }
+  .sub { display: block; color: var(--muted); font-size: 13px; white-space: pre-line; }
+  td.who a { font-size: 14px; }
+  td.addr { min-width: 240px; max-width: 360px; white-space: pre-line; }
+  td.items { min-width: 220px; white-space: pre-line; font-size: 14px; }
+  td.buyer { min-width: 140px; white-space: pre-line; font-size: 14px; }
+  .badge {
+    display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 600;
+    border: 1px solid var(--line); white-space: nowrap;
+  }
+  .badge.done { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .badge.wait { color: var(--muted); }
+  .track { display: block; margin-top: 4px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .copy {
+    margin-top: 6px; padding: 2px 8px; font-size: 12px; border-radius: 6px;
+    border: 1px solid var(--line); background: var(--surface); cursor: pointer; color: var(--accent);
+  }
 
   @media (max-width: 600px) {
     th, td { padding: 8px 10px; }
@@ -321,10 +342,18 @@
     shirts.push({ order: '', time: '', color: 'เขียว', size: 'M', name: 'STAFF', number: '0', slip: '' });
     const caps = ['ตัวอย่าง หนึ่ง', 'ตัวอย่าง สอง', 'ตัวอย่าง สาม', 'ตัวอย่าง สี่', 'ตัวอย่าง ห้า'].map((n, i) => ({
       order: '#' + (20 + i), time: day(4 + i % 4), name: n, grade: 'ม.' + (i + 1), room: String(i + 2), phone: '0800000' + String(100 + i),
-      social: '@demo' + (i + 1), product: i % 2 ? 'หมวก RCWD' : 'RCWD Jersey + หมวก RCWD', slip: '',
+      social: '@demo' + (i + 1), product: i % 2 ? 'หมวก RCWD' : 'RCWD Jersey + หมวก RCWD', qty: i === 1 ? 3 : i === 3 ? 2 : 1, slip: '',
     }));
+    const shipping = [
+      { order: '#2', time: day(3), name: 'ผู้รับ ตัวอย่าง', phone: '0811111111', address: '99/1 ถ.ตัวอย่าง แขวงสามเสนใน เขตพญาไท กรุงเทพฯ 10400',
+        items: 'Jersey เขียว · L · DEMO · 7', buyer: 'ตัวอย่าง สอง\nม.5 ห้อง 2', contact: '0800000101\n@demo2', shipped: true, tracking: 'TH0000000001', slip: '' },
+      { order: '#21', time: day(5), name: 'ผู้ปกครอง ตัวอย่าง', phone: '0822222222', address: '12 หมู่ 3 ต.ตัวอย่าง อ.ตัวอย่าง นนทบุรี 11120',
+        items: 'หมวก RCWD 3 ใบ', buyer: 'ตัวอย่าง สอง\nม.2 ห้อง 3', contact: '0800000101\n@demo2', shipped: false, tracking: '', slip: '' },
+      { order: '#9', time: day(6), name: 'ป้า ตัวอย่าง', phone: '0833333333', address: 'คอนโดตัวอย่าง ห้อง 1201\nซอยตัวอย่าง 3',
+        items: 'Jersey ขาว · M · FLAG · 63\nJersey เขียว · M · STAND · 70\nหมวก RCWD 1 ใบ', buyer: 'ตัวอย่าง สาม\nม.3 ห้อง 4', contact: '0800000102\n@demo3', shipped: false, tracking: '', slip: '' },
+    ];
     return Promise.resolve({ ok: true, demo: true, updatedAt: new Date().toISOString(), sheetUrl: '', onlyVerified: true,
-      sizes: ['S', 'M', 'L', 'XL', '2XL', '3XL'], colors: ['เขียว', 'ขาว'], capLabel: 'หมวก RCWD', shirts, caps });
+      sizes: ['S', 'M', 'L', 'XL', '2XL', '3XL'], colors: ['เขียว', 'ขาว'], capLabel: 'หมวก RCWD', shipLabel: 'จัดส่ง', shirts, caps, shipping });
   }
 
   // ---------- views ----------
@@ -334,7 +363,7 @@
     $('app').hidden = view !== 'app';
   }
 
-  // หมวด: เสื้อแยกตามสี (Jersey เขียว, Jersey ขาว, ...) + หมวก
+  // หมวด: เสื้อแยกตามสี (Jersey เขียว, Jersey ขาว, ...) + หมวก + จัดส่ง (ถ้าสคริปต์ส่งมา)
   const SWATCH = { 'เขียว': 'green', 'ขาว': 'white' };
   function viewList(d) {
     const colors = Array.isArray(d.colors) && d.colors.length ? d.colors : [null];
@@ -343,6 +372,7 @@
       label: c ? 'Jersey ' + c : 'เสื้อ', swatch: SWATCH[c] || '',
     }));
     list.push({ key: 'caps', kind: 'cap', label: d.capLabel || 'หมวก' });
+    if (Array.isArray(d.shipping)) list.push({ key: 'ship', kind: 'ship', label: d.shipLabel || 'จัดส่ง' });
     return list;
   }
   function currentView() {
@@ -350,11 +380,15 @@
     return views.find(v => v.key === state.view) || views[0];
   }
   function rowsOf(view, onlyInRange) {
-    const base = view.kind === 'cap'
-      ? state.data.caps
+    const base = view.kind === 'cap' ? state.data.caps
+      : view.kind === 'ship' ? state.data.shipping
       : state.data.shirts.filter(r => view.color === null || r.color === view.color);
     return onlyInRange ? base.filter(inRange) : base;
   }
+  // หมวกนับเป็นใบ (ออเดอร์หนึ่งสั่งได้หลายใบ) ที่เหลือนับแถว
+  const qtyOf = r => Math.max(1, Number(r.qty) || 1);
+  const countOf = (view, rows) => (view.kind === 'cap' ? rows.reduce((t, r) => t + qtyOf(r), 0) : rows.length);
+  const UNIT = { shirt: 'ตัว', cap: 'ใบ', ship: 'ออเดอร์' };
 
   function inRange(row) {
     if (!state.from && !state.to) return true;
@@ -370,17 +404,19 @@
       const o = String(row.order || '');
       return o === q || o.indexOf(q + '-') === 0;
     }
-    const hay = currentView().kind === 'shirt'
-      ? [row.name, row.number, row.size, row.order]
+    const kind = currentView().kind;
+    const hay = kind === 'shirt' ? [row.name, row.number, row.size, row.order]
+      : kind === 'ship' ? [row.name, row.phone, row.address, row.items, row.buyer, row.contact, row.tracking, row.order]
       : [row.name, row.phone, row.social, row.grade, row.room, row.product, row.order];
     return hay.some(v => String(v || '').toLowerCase().includes(q));
   }
 
   function columnsFor(kind) {
     const order = state.withOrder ? ['ออเดอร์'] : [];
+    if (kind === 'ship') return ['ลำดับ', 'ผู้รับ', 'ที่อยู่', 'รายการ', 'ผู้สั่ง'].concat(order, ['สถานะ', 'วันที่สั่ง', 'สลิป']);
     const main = kind === 'shirt'
       ? ['ลำดับ', 'Size', 'ชื่อหลังเสื้อ', 'เลขหลังเสื้อ']
-      : ['ลำดับ', 'ชื่อ', 'ชั้น', 'ห้อง', 'เบอร์ติดต่อ', 'IG / Line', 'สินค้าที่สั่ง'];
+      : ['ลำดับ', 'ชื่อ', 'ชั้น', 'ห้อง', 'เบอร์ติดต่อ', 'IG / Line', 'สินค้าที่สั่ง'].concat(state.withQty ? ['จำนวน'] : []);
     return main.concat(order, ['วันที่สั่ง', 'สลิป']);
   }
 
@@ -429,7 +465,45 @@
       el('td', { class: 'nowrap', text: row.phone }),
       el('td', { text: row.social }),
       el('td', { class: 'wrapcell', text: row.product }),
+      state.withQty ? el('td', { class: 'qty' }, [el('span', { class: 'num', text: String(qtyOf(row)) })]) : null,
       orderCell(row),
+      el('td', { class: 'when', text: shortDate(row.time) }),
+      slipCell(row),
+    ]);
+  }
+
+  // เบอร์โทรกดโทรได้บนมือถือ
+  function telLink(phone) {
+    const digits = String(phone || '').replace(/[^\d+]/g, '');
+    if (digits.length < 9) return phone ? el('span', { class: 'sub', text: phone }) : null;
+    return el('a', { href: 'tel:' + digits, text: phone });
+  }
+
+  async function copyLabel(row, btn) {
+    const text = [row.name, row.phone, row.address].filter(Boolean).join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      btn.textContent = 'คัดลอกแล้ว';
+    } catch (e) {
+      btn.textContent = 'คัดลอกไม่ได้';
+    }
+    setTimeout(() => { btn.textContent = 'คัดลอกชื่อ+ที่อยู่'; }, 1500);
+  }
+
+  function shipRow(row, i) {
+    const copy = el('button', { type: 'button', class: 'copy', text: 'คัดลอกชื่อ+ที่อยู่', title: 'คัดลอกชื่อ เบอร์ และที่อยู่ ไปวางในใบจ่าหน้า' });
+    copy.addEventListener('click', () => copyLabel(row, copy));
+    return el('tr', null, [
+      el('td', { class: 'idx', text: String(i + 1) }),
+      el('td', { class: 'who' }, [el('strong', { text: row.name || '-' }), telLink(row.phone)]),
+      el('td', { class: 'addr' }, [row.address || '-', el('br'), copy]),
+      el('td', { class: 'items', text: row.items || '-' }),
+      el('td', { class: 'buyer' }, [row.buyer || '-', row.contact ? el('span', { class: 'sub', text: row.contact }) : null]),
+      orderCell(row),
+      el('td', { class: 'nowrap' }, [
+        el('span', { class: 'badge ' + (row.shipped ? 'done' : 'wait'), text: row.shipped ? 'ส่งแล้ว' : 'รอส่ง' }),
+        row.tracking ? el('span', { class: 'track', text: row.tracking }) : null,
+      ]),
       el('td', { class: 'when', text: shortDate(row.time) }),
       slipCell(row),
     ]);
@@ -449,10 +523,15 @@
       const items = sizes.map(s => [s, rows.filter(r => r.size === s).length]);
       return { items, total: ['รวม (ตัว)', rows.length] };
     }
-    const withShirt = rows.filter(r => /jersey|เสื้อ/i.test(r.product)).length;
+    if (view.kind === 'ship') {
+      const done = rows.filter(r => r.shipped).length;
+      return { items: [['รอส่ง', rows.length - done], ['ส่งแล้ว', done]], total: ['รวม (ออเดอร์)', rows.length] };
+    }
+    const withShirt = rows.filter(r => /jersey|เสื้อ/i.test(r.product)).reduce((t, r) => t + qtyOf(r), 0);
+    const total = countOf(view, rows);
     return {
-      items: [['สั่งคู่กับเสื้อ', withShirt], ['หมวกอย่างเดียว', rows.length - withShirt]],
-      total: ['รวม (ใบ)', rows.length],
+      items: [['สั่งคู่กับเสื้อ', withShirt], ['หมวกอย่างเดียว', total - withShirt]],
+      total: ['รวม (ใบ)', total],
     };
   }
 
@@ -461,29 +540,31 @@
     const views = viewList(d);
     const view = currentView();
     state.view = view.key;
-    // สคริปต์เวอร์ชันใหม่ส่งเลขออเดอร์มาด้วย (เวอร์ชันเก่าไม่มี ก็ซ่อนคอลัมน์นี้)
-    state.withOrder = d.shirts.concat(d.caps).some(r => r && Object.prototype.hasOwnProperty.call(r, 'order'));
+    // สคริปต์เวอร์ชันใหม่ส่งเลขออเดอร์ / จำนวนหมวกมาด้วย (เวอร์ชันเก่าไม่มี ก็ซ่อนคอลัมน์นั้น)
+    const has = (list, key) => (list || []).some(r => r && Object.prototype.hasOwnProperty.call(r, key));
+    state.withOrder = has(d.shirts.concat(d.caps, d.shipping || []), 'order');
+    state.withQty = has(d.caps, 'qty');
     const rows = rowsOf(view, true);
     const shown = rows.filter(matches);
 
     $('switch').replaceChildren(...views.map(v => el('button', { type: 'button', 'data-view': v.key, 'aria-pressed': String(v.key === view.key) }, [
       el('span', { class: 'label' }, [v.swatch ? el('span', { class: 'swatch ' + v.swatch, 'aria-hidden': 'true' }) : null, v.label]),
-      el('span', { class: 'num', text: String(rowsOf(v, true).length) }),
+      el('span', { class: 'num', text: String(countOf(v, rowsOf(v, true))) }),
     ])));
-    $('q').placeholder = (view.kind === 'shirt' ? 'ชื่อหลังเสื้อ หรือเลข' : 'ชื่อ เบอร์ IG หรือห้อง') +
-      (state.withOrder ? ' หรือ #ออเดอร์' : '');
+    $('q').placeholder = (view.kind === 'shirt' ? 'ชื่อหลังเสื้อ หรือเลข'
+      : view.kind === 'ship' ? 'ชื่อ เบอร์ ที่อยู่ หรือเลขพัสดุ'
+      : 'ชื่อ เบอร์ IG หรือห้อง') + (state.withOrder ? ' หรือ #ออเดอร์' : '');
     $('clear-dates').hidden = !state.from && !state.to;
 
-    const unit = view.kind === 'shirt' ? 'ตัว' : 'ใบ';
     const exportBtn = $('export');
-    exportBtn.textContent = 'ดาวน์โหลด Excel (' + rows.length + ' ' + unit + ')';
+    exportBtn.textContent = 'ดาวน์โหลด Excel (' + countOf(view, rows) + ' ' + UNIT[view.kind] + ')';
     exportBtn.disabled = rows.length === 0;
 
     const s = summary(rows, view);
     $('run').replaceChildren(...s.items.map(([k, v]) => runItem(k, v)), runItem(s.total[0], s.total[1], 'total'));
 
     $('thead').replaceChildren(el('tr', null, columnsFor(view.kind).map(label => el('th', { scope: 'col', text: label }))));
-    const make = view.kind === 'shirt' ? shirtRow : capRow;
+    const make = view.kind === 'shirt' ? shirtRow : view.kind === 'ship' ? shipRow : capRow;
     $('tbody').replaceChildren(...shown.map(make));
 
     const empty = shown.length === 0;
@@ -492,7 +573,8 @@
       const hasRange = state.from || state.to;
       $('empty-text').textContent = state.q
         ? 'ไม่พบ "' + state.q + '" ในรายการนี้'
-        : hasRange ? 'ไม่มีออเดอร์ในช่วงวันที่นี้' : 'ยังไม่มีออเดอร์ที่สลิปผ่าน';
+        : hasRange ? 'ไม่มีออเดอร์ในช่วงวันที่นี้'
+        : view.kind === 'ship' ? 'ยังไม่มีออเดอร์ที่ต้องจัดส่ง' : 'ยังไม่มีออเดอร์ที่สลิปผ่าน';
       $('empty-reset').hidden = !hasRange || !!state.q;
     }
 
@@ -531,14 +613,23 @@
       const order = r => (withOrder ? [r.order || 'เพิ่มเอง'] : []);
       const orderHead = withOrder ? ['ออเดอร์'] : [];
       const orderWidth = withOrder ? [10] : [];
+      // ช่องที่มีหลายบรรทัด (รายการ ผู้สั่ง) ต่อกันด้วย " / " จะได้อ่านง่ายใน Excel
+      const oneLine = v => String(v || '').split('\n').map(x => x.trim()).filter(Boolean).join(' / ');
+      const qtyHead = state.withQty ? ['จำนวน (ใบ)'] : [];
       if (view.kind === 'shirt') {
         header = ['ลำดับ', 'Size', 'ชื่อหลังเสื้อ', 'เลขหลังเสื้อ'].concat(orderHead, ['วันที่สั่ง', 'ลิงก์สลิป']);
         body = rows.map((r, i) => [i + 1, r.size, r.name, String(r.number || '')].concat(order(r), [when(r), safeLink(r.slip)]));
         widths = [7, 8, 18, 12].concat(orderWidth, [18, 45]);
+      } else if (view.kind === 'ship') {
+        header = ['ลำดับ', 'ชื่อผู้รับ', 'เบอร์โทร', 'ที่อยู่', 'รายการ', 'ผู้สั่ง', 'ติดต่อผู้สั่ง'].concat(orderHead, ['สถานะ', 'เลขพัสดุ', 'วันที่สั่ง', 'ลิงก์สลิป']);
+        body = rows.map((r, i) => [i + 1, r.name, String(r.phone || ''), oneLine(r.address), oneLine(r.items), oneLine(r.buyer), oneLine(r.contact)]
+          .concat(order(r), [r.shipped ? 'ส่งแล้ว' : 'รอส่ง', String(r.tracking || ''), when(r), safeLink(r.slip)]));
+        widths = [7, 22, 14, 50, 45, 26, 22].concat(orderWidth, [9, 18, 18, 45]);
       } else {
-        header = ['ลำดับ', 'ชื่อ', 'ชั้น', 'ห้อง', 'เบอร์ติดต่อ', 'IG / Line', 'สินค้าที่สั่ง'].concat(orderHead, ['วันที่สั่ง', 'ลิงก์สลิป']);
-        body = rows.map((r, i) => [i + 1, r.name, r.grade, String(r.room || ''), String(r.phone || ''), r.social, r.product].concat(order(r), [when(r), safeLink(r.slip)]));
-        widths = [7, 26, 10, 6, 14, 20, 26].concat(orderWidth, [18, 45]);
+        header = ['ลำดับ', 'ชื่อ', 'ชั้น', 'ห้อง', 'เบอร์ติดต่อ', 'IG / Line', 'สินค้าที่สั่ง'].concat(qtyHead, orderHead, ['วันที่สั่ง', 'ลิงก์สลิป']);
+        body = rows.map((r, i) => [i + 1, r.name, r.grade, String(r.room || ''), String(r.phone || ''), r.social, r.product]
+          .concat(state.withQty ? [qtyOf(r)] : [], order(r), [when(r), safeLink(r.slip)]));
+        widths = [7, 26, 10, 6, 14, 20, 26].concat(state.withQty ? [10] : [], orderWidth, [18, 45]);
       }
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.aoa_to_sheet([header].concat(body));
@@ -546,7 +637,7 @@
       XLSX.utils.book_append_sheet(wb, ws, sheetName);
 
       const s = summary(rows, view);
-      const sum = XLSX.utils.aoa_to_sheet([[view.kind === 'shirt' ? 'Size' : 'รายการ', 'จำนวน']].concat(s.items, [s.total]));
+      const sum = XLSX.utils.aoa_to_sheet([[view.kind === 'shirt' ? 'Size' : view.kind === 'ship' ? 'สถานะ' : 'รายการ', 'จำนวน']].concat(s.items, [s.total]));
       sum['!cols'] = [{ wch: 16 }, { wch: 10 }];
       XLSX.utils.book_append_sheet(wb, sum, 'สรุป');
 
