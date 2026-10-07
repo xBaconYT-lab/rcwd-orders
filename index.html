@@ -52,7 +52,7 @@
 
   .num { font-family: 'Teko', 'Prompt', sans-serif; font-weight: 600; letter-spacing: 0.02em; line-height: 1; }
 
-  .wrap { max-width: 1040px; margin: 0 auto; padding: 24px 16px 48px; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 24px 16px 48px; }
   @media (min-width: 720px) { .wrap { padding: 40px 32px 64px; } }
 
   /* ---------- wordmark ---------- */
@@ -173,9 +173,23 @@
   td.who strong { font-weight: 600; display: block; }
   .sub { display: block; color: var(--muted); font-size: 13px; white-space: pre-line; }
   td.who a { font-size: 14px; }
-  td.addr { min-width: 240px; max-width: 360px; white-space: pre-line; }
-  td.items { min-width: 220px; white-space: pre-line; font-size: 14px; }
-  td.buyer { min-width: 140px; white-space: pre-line; font-size: 14px; }
+  td.addr { min-width: 220px; max-width: 340px; white-space: pre-line; }
+  td.items { min-width: 200px; white-space: pre-line; font-size: 14px; }
+  td.buyer { min-width: 130px; white-space: pre-line; font-size: 14px; }
+  /* มือถือ: จัดส่งเป็นการ์ดทีละออเดอร์ ไม่ต้องเลื่อนตารางไปข้าง */
+  @media (max-width: 720px) {
+    table.ship thead { display: none; }
+    table.ship, table.ship tbody, table.ship tr, table.ship td { display: block; width: 100%; }
+    table.ship tr { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+    table.ship tr:last-child { border-bottom: 0; }
+    table.ship td { border: 0; padding: 3px 0; min-width: 0; max-width: none; white-space: normal; }
+    table.ship td.addr, table.ship td.items, table.ship td.buyer { white-space: pre-line; }
+    table.ship td[data-label]::before {
+      content: attr(data-label); display: block; font-size: 12px; font-weight: 500; color: var(--muted);
+    }
+    table.ship td.idx { display: none; }
+    table.ship td.who strong { font-size: 17px; }
+  }
   .badge {
     display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 600;
     border: 1px solid var(--line); white-space: nowrap;
@@ -493,19 +507,23 @@
   function shipRow(row, i) {
     const copy = el('button', { type: 'button', class: 'copy', text: 'คัดลอกชื่อ+ที่อยู่', title: 'คัดลอกชื่อ เบอร์ และที่อยู่ ไปวางในใบจ่าหน้า' });
     copy.addEventListener('click', () => copyLabel(row, copy));
+    const order = orderCell(row);
+    if (order) order.setAttribute('data-label', 'ออเดอร์');
+    const slip = slipCell(row);
+    slip.setAttribute('data-label', 'สลิป');
     return el('tr', null, [
       el('td', { class: 'idx', text: String(i + 1) }),
       el('td', { class: 'who' }, [el('strong', { text: row.name || '-' }), telLink(row.phone)]),
-      el('td', { class: 'addr' }, [row.address || '-', el('br'), copy]),
-      el('td', { class: 'items', text: row.items || '-' }),
-      el('td', { class: 'buyer' }, [row.buyer || '-', row.contact ? el('span', { class: 'sub', text: row.contact }) : null]),
-      orderCell(row),
-      el('td', { class: 'nowrap' }, [
+      el('td', { class: 'addr', 'data-label': 'ที่อยู่' }, [row.address || '-', el('br'), copy]),
+      el('td', { class: 'items', 'data-label': 'รายการ', text: row.items || '-' }),
+      el('td', { class: 'buyer', 'data-label': 'ผู้สั่ง' }, [row.buyer || '-', row.contact ? el('span', { class: 'sub', text: row.contact }) : null]),
+      order,
+      el('td', { class: 'nowrap', 'data-label': 'สถานะ' }, [
         el('span', { class: 'badge ' + (row.shipped ? 'done' : 'wait'), text: row.shipped ? 'ส่งแล้ว' : 'รอส่ง' }),
         row.tracking ? el('span', { class: 'track', text: row.tracking }) : null,
       ]),
-      el('td', { class: 'when', text: shortDate(row.time) }),
-      slipCell(row),
+      el('td', { class: 'when', 'data-label': 'วันที่สั่ง', text: shortDate(row.time) }),
+      slip,
     ]);
   }
 
@@ -563,6 +581,7 @@
     const s = summary(rows, view);
     $('run').replaceChildren(...s.items.map(([k, v]) => runItem(k, v)), runItem(s.total[0], s.total[1], 'total'));
 
+    $('thead').closest('table').className = view.kind;
     $('thead').replaceChildren(el('tr', null, columnsFor(view.kind).map(label => el('th', { scope: 'col', text: label }))));
     const make = view.kind === 'shirt' ? shirtRow : view.kind === 'ship' ? shipRow : capRow;
     $('tbody').replaceChildren(...shown.map(make));
