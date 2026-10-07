@@ -159,6 +159,12 @@
   td.flag { color: var(--danger); }
   td.flag .hint { display: block; font-size: 12px; font-weight: 400; letter-spacing: 0; }
   td.wrapcell { min-width: 140px; }
+  /* ออเดอร์ #8-1 = ลำดับ 8 ในแท็บตรวจสลิป เสื้อตัวที่ 1 */
+  td.order { color: var(--muted); font-size: 14px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  td.order .manual {
+    display: inline-block; padding: 1px 8px; font-size: 12px;
+    border: 1px dashed var(--line); border-radius: 999px;
+  }
   td.nowrap { white-space: nowrap; }
 
   @media (max-width: 600px) {
@@ -309,11 +315,12 @@
     const sizes = ['M', 'L', 'S', 'XL', 'M', '2XL', 'L', 'M', 'S', 'M', '3XL', 'L', 'M', 'XL'];
     const day = d => new Date(Date.UTC(2026, 9, d, 4 + (d % 5), 10 + d)).toISOString();
     const shirts = names.map((n, i) => ({
-      time: day(3 + (i % 5)), color: i % 3 === 0 ? 'ขาว' : 'เขียว', size: sizes[i], name: n,
+      order: '#' + (i + 1) + '-1', time: day(3 + (i % 5)), color: i % 3 === 0 ? 'ขาว' : 'เขียว', size: sizes[i], name: n,
       number: i === 5 ? '1234' : String((i * 7) % 99).padStart(i % 4 === 0 ? 2 : 1, '0'), piece: 1, slip: '',
     }));
+    shirts.push({ order: '', time: '', color: 'เขียว', size: 'M', name: 'STAFF', number: '0', slip: '' });
     const caps = ['ตัวอย่าง หนึ่ง', 'ตัวอย่าง สอง', 'ตัวอย่าง สาม', 'ตัวอย่าง สี่', 'ตัวอย่าง ห้า'].map((n, i) => ({
-      time: day(4 + i % 4), name: n, grade: 'ม.' + (i + 1), room: String(i + 2), phone: '0800000' + String(100 + i),
+      order: '#' + (20 + i), time: day(4 + i % 4), name: n, grade: 'ม.' + (i + 1), room: String(i + 2), phone: '0800000' + String(100 + i),
       social: '@demo' + (i + 1), product: i % 2 ? 'หมวก RCWD' : 'RCWD Jersey + หมวก RCWD', slip: '',
     }));
     return Promise.resolve({ ok: true, demo: true, updatedAt: new Date().toISOString(), sheetUrl: '', onlyVerified: true,
@@ -359,22 +366,31 @@
   function matches(row) {
     if (!state.q) return true;
     const q = state.q.toLowerCase();
+    if (/^#\d+$/.test(q)) {
+      const o = String(row.order || '');
+      return o === q || o.indexOf(q + '-') === 0;
+    }
     const hay = currentView().kind === 'shirt'
-      ? [row.name, row.number, row.size]
-      : [row.name, row.phone, row.social, row.grade, row.room, row.product];
+      ? [row.name, row.number, row.size, row.order]
+      : [row.name, row.phone, row.social, row.grade, row.room, row.product, row.order];
     return hay.some(v => String(v || '').toLowerCase().includes(q));
   }
 
-  const columns = {
-    shirt: [
-      { label: 'ลำดับ' }, { label: 'Size' }, { label: 'ชื่อหลังเสื้อ' }, { label: 'เลขหลังเสื้อ' },
-      { label: 'วันที่สั่ง' }, { label: 'สลิป' },
-    ],
-    cap: [
-      { label: 'ลำดับ' }, { label: 'ชื่อ' }, { label: 'ชั้น' }, { label: 'ห้อง' }, { label: 'เบอร์ติดต่อ' },
-      { label: 'IG / Line' }, { label: 'สินค้าที่สั่ง' }, { label: 'วันที่สั่ง' }, { label: 'สลิป' },
-    ],
-  };
+  function columnsFor(kind) {
+    const order = state.withOrder ? ['ออเดอร์'] : [];
+    const main = kind === 'shirt'
+      ? ['ลำดับ', 'Size', 'ชื่อหลังเสื้อ', 'เลขหลังเสื้อ']
+      : ['ลำดับ', 'ชื่อ', 'ชั้น', 'ห้อง', 'เบอร์ติดต่อ', 'IG / Line', 'สินค้าที่สั่ง'];
+    return main.concat(order, ['วันที่สั่ง', 'สลิป']);
+  }
+
+  // แถวที่ไม่มีเลขออเดอร์ = พิมพ์เพิ่มเองในชีต
+  function orderCell(row) {
+    if (!state.withOrder) return null;
+    return row.order
+      ? el('td', { class: 'order', text: row.order })
+      : el('td', { class: 'order' }, [el('span', { class: 'manual', text: 'เพิ่มเอง', title: 'แถวที่พิมพ์เพิ่มเองในชีต' })]);
+  }
 
   function slipCell(row) {
     const url = safeLink(row.slip);
@@ -398,6 +414,7 @@
         el('span', { class: 'num', text: row.number || '-' }),
         numberBad ? el('span', { class: 'hint', text: 'ต้องเป็นตัวเลข 1-3 หลัก' }) : null,
       ]),
+      orderCell(row),
       el('td', { class: 'when', text: shortDate(row.time) }),
       slipCell(row),
     ]);
@@ -412,6 +429,7 @@
       el('td', { class: 'nowrap', text: row.phone }),
       el('td', { text: row.social }),
       el('td', { class: 'wrapcell', text: row.product }),
+      orderCell(row),
       el('td', { class: 'when', text: shortDate(row.time) }),
       slipCell(row),
     ]);
@@ -443,6 +461,8 @@
     const views = viewList(d);
     const view = currentView();
     state.view = view.key;
+    // สคริปต์เวอร์ชันใหม่ส่งเลขออเดอร์มาด้วย (เวอร์ชันเก่าไม่มี ก็ซ่อนคอลัมน์นี้)
+    state.withOrder = d.shirts.concat(d.caps).some(r => r && Object.prototype.hasOwnProperty.call(r, 'order'));
     const rows = rowsOf(view, true);
     const shown = rows.filter(matches);
 
@@ -450,7 +470,8 @@
       el('span', { class: 'label' }, [v.swatch ? el('span', { class: 'swatch ' + v.swatch, 'aria-hidden': 'true' }) : null, v.label]),
       el('span', { class: 'num', text: String(rowsOf(v, true).length) }),
     ])));
-    $('q').placeholder = view.kind === 'shirt' ? 'ชื่อหลังเสื้อ หรือเลข' : 'ชื่อ เบอร์ IG หรือห้อง';
+    $('q').placeholder = (view.kind === 'shirt' ? 'ชื่อหลังเสื้อ หรือเลข' : 'ชื่อ เบอร์ IG หรือห้อง') +
+      (state.withOrder ? ' หรือ #ออเดอร์' : '');
     $('clear-dates').hidden = !state.from && !state.to;
 
     const unit = view.kind === 'shirt' ? 'ตัว' : 'ใบ';
@@ -461,7 +482,7 @@
     const s = summary(rows, view);
     $('run').replaceChildren(...s.items.map(([k, v]) => runItem(k, v)), runItem(s.total[0], s.total[1], 'total'));
 
-    $('thead').replaceChildren(el('tr', null, columns[view.kind].map(c => el('th', { scope: 'col', text: c.label }))));
+    $('thead').replaceChildren(el('tr', null, columnsFor(view.kind).map(label => el('th', { scope: 'col', text: label }))));
     const make = view.kind === 'shirt' ? shirtRow : capRow;
     $('tbody').replaceChildren(...shown.map(make));
 
@@ -506,14 +527,18 @@
       const when = r => { const t = toDate(r.time); return t ? fullFmt.format(t).replace(',', '') : ''; };
       let header, body, widths, sheetName;
       sheetName = view.label.slice(0, 31);
+      const withOrder = state.withOrder;
+      const order = r => (withOrder ? [r.order || 'เพิ่มเอง'] : []);
+      const orderHead = withOrder ? ['ออเดอร์'] : [];
+      const orderWidth = withOrder ? [10] : [];
       if (view.kind === 'shirt') {
-        header = ['ลำดับ', 'Size', 'ชื่อหลังเสื้อ', 'เลขหลังเสื้อ', 'วันที่สั่ง', 'ลิงก์สลิป'];
-        body = rows.map((r, i) => [i + 1, r.size, r.name, String(r.number || ''), when(r), safeLink(r.slip)]);
-        widths = [7, 8, 18, 12, 18, 45];
+        header = ['ลำดับ', 'Size', 'ชื่อหลังเสื้อ', 'เลขหลังเสื้อ'].concat(orderHead, ['วันที่สั่ง', 'ลิงก์สลิป']);
+        body = rows.map((r, i) => [i + 1, r.size, r.name, String(r.number || '')].concat(order(r), [when(r), safeLink(r.slip)]));
+        widths = [7, 8, 18, 12].concat(orderWidth, [18, 45]);
       } else {
-        header = ['ลำดับ', 'ชื่อ', 'ชั้น', 'ห้อง', 'เบอร์ติดต่อ', 'IG / Line', 'สินค้าที่สั่ง', 'วันที่สั่ง', 'ลิงก์สลิป'];
-        body = rows.map((r, i) => [i + 1, r.name, r.grade, String(r.room || ''), String(r.phone || ''), r.social, r.product, when(r), safeLink(r.slip)]);
-        widths = [7, 26, 10, 6, 14, 20, 26, 18, 45];
+        header = ['ลำดับ', 'ชื่อ', 'ชั้น', 'ห้อง', 'เบอร์ติดต่อ', 'IG / Line', 'สินค้าที่สั่ง'].concat(orderHead, ['วันที่สั่ง', 'ลิงก์สลิป']);
+        body = rows.map((r, i) => [i + 1, r.name, r.grade, String(r.room || ''), String(r.phone || ''), r.social, r.product].concat(order(r), [when(r), safeLink(r.slip)]));
+        widths = [7, 26, 10, 6, 14, 20, 26].concat(orderWidth, [18, 45]);
       }
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.aoa_to_sheet([header].concat(body));
