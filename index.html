@@ -96,14 +96,17 @@
   .top-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
   /* category switch: the two big choices */
-  .switch { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
-  @media (min-width: 720px) { .switch { grid-template-columns: 220px 220px; } }
+  .switch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+  @media (min-width: 720px) { .switch { grid-template-columns: repeat(auto-fill, 220px); } }
   .switch button {
     display: flex; align-items: center; justify-content: space-between;
     padding: 12px 16px; border-radius: var(--radius); border: 1px solid var(--line);
     background: var(--surface); cursor: pointer; text-align: left;
   }
-  .switch button span:first-child { font-size: 18px; font-weight: 600; }
+  .switch .label { display: inline-flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 600; }
+  .swatch { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--line); flex: none; }
+  .swatch.green { background: #1f7a55; border-color: #1f7a55; }
+  .swatch.white { background: #ffffff; border-color: #b9c9c0; }
   .switch button .num { font-size: 34px; color: var(--muted); }
   .switch button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
   .switch button[aria-pressed="true"] .num { color: var(--accent); }
@@ -214,10 +217,7 @@
     </div>
   </header>
 
-  <div class="switch" role="group" aria-label="เลือกหมวด">
-    <button type="button" data-view="shirts" aria-pressed="true"><span>เสื้อ</span><span class="num" id="count-shirts">0</span></button>
-    <button type="button" data-view="caps" aria-pressed="false"><span>หมวก</span><span class="num" id="count-caps">0</span></button>
-  </div>
+  <div class="switch" id="switch" role="group" aria-label="เลือกหมวด"></div>
 
   <div class="filters">
     <label class="field"><span>ตั้งแต่วันที่</span><input type="date" id="from"></label>
@@ -256,7 +256,7 @@
   const AUTH_KEY = 'rcwd-auth';
   const XLSX_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 
-  const state = { data: null, view: 'shirts', from: '', to: '', q: '' };
+  const state = { data: null, view: '', from: '', to: '', q: '' };
   const $ = id => document.getElementById(id);
 
   // ---------- helpers ----------
@@ -309,15 +309,15 @@
     const sizes = ['M', 'L', 'S', 'XL', 'M', '2XL', 'L', 'M', 'S', 'M', '3XL', 'L', 'M', 'XL'];
     const day = d => new Date(Date.UTC(2026, 9, d, 4 + (d % 5), 10 + d)).toISOString();
     const shirts = names.map((n, i) => ({
-      time: day(3 + (i % 5)), size: sizes[i], name: n, number: i === 5 ? '1234' : String((i * 7) % 99).padStart(i % 4 === 0 ? 2 : 1, '0'),
-      piece: 1, slip: '',
+      time: day(3 + (i % 5)), color: i % 3 === 0 ? 'ขาว' : 'เขียว', size: sizes[i], name: n,
+      number: i === 5 ? '1234' : String((i * 7) % 99).padStart(i % 4 === 0 ? 2 : 1, '0'), piece: 1, slip: '',
     }));
     const caps = ['ตัวอย่าง หนึ่ง', 'ตัวอย่าง สอง', 'ตัวอย่าง สาม', 'ตัวอย่าง สี่', 'ตัวอย่าง ห้า'].map((n, i) => ({
       time: day(4 + i % 4), name: n, grade: 'ม.' + (i + 1), room: String(i + 2), phone: '0800000' + String(100 + i),
       social: '@demo' + (i + 1), product: i % 2 ? 'หมวก RCWD' : 'RCWD Jersey + หมวก RCWD', slip: '',
     }));
     return Promise.resolve({ ok: true, demo: true, updatedAt: new Date().toISOString(), sheetUrl: '', onlyVerified: true,
-      sizes: ['S', 'M', 'L', 'XL', '2XL', '3XL'], shirts, caps });
+      sizes: ['S', 'M', 'L', 'XL', '2XL', '3XL'], colors: ['เขียว', 'ขาว'], capLabel: 'หมวก RCWD', shirts, caps });
   }
 
   // ---------- views ----------
@@ -325,6 +325,28 @@
     $('loading').hidden = view !== 'loading';
     $('login').hidden = view !== 'login';
     $('app').hidden = view !== 'app';
+  }
+
+  // หมวด: เสื้อแยกตามสี (Jersey เขียว, Jersey ขาว, ...) + หมวก
+  const SWATCH = { 'เขียว': 'green', 'ขาว': 'white' };
+  function viewList(d) {
+    const colors = Array.isArray(d.colors) && d.colors.length ? d.colors : [null];
+    const list = colors.map(c => ({
+      key: 'shirt:' + (c || ''), kind: 'shirt', color: c,
+      label: c ? 'Jersey ' + c : 'เสื้อ', swatch: SWATCH[c] || '',
+    }));
+    list.push({ key: 'caps', kind: 'cap', label: d.capLabel || 'หมวก' });
+    return list;
+  }
+  function currentView() {
+    const views = viewList(state.data);
+    return views.find(v => v.key === state.view) || views[0];
+  }
+  function rowsOf(view, onlyInRange) {
+    const base = view.kind === 'cap'
+      ? state.data.caps
+      : state.data.shirts.filter(r => view.color === null || r.color === view.color);
+    return onlyInRange ? base.filter(inRange) : base;
   }
 
   function inRange(row) {
@@ -337,18 +359,18 @@
   function matches(row) {
     if (!state.q) return true;
     const q = state.q.toLowerCase();
-    const hay = state.view === 'shirts'
+    const hay = currentView().kind === 'shirt'
       ? [row.name, row.number, row.size]
       : [row.name, row.phone, row.social, row.grade, row.room, row.product];
     return hay.some(v => String(v || '').toLowerCase().includes(q));
   }
 
   const columns = {
-    shirts: [
+    shirt: [
       { label: 'ลำดับ' }, { label: 'Size' }, { label: 'ชื่อหลังเสื้อ' }, { label: 'เลขหลังเสื้อ' },
       { label: 'วันที่สั่ง' }, { label: 'สลิป' },
     ],
-    caps: [
+    cap: [
       { label: 'ลำดับ' }, { label: 'ชื่อ' }, { label: 'ชั้น' }, { label: 'ห้อง' }, { label: 'เบอร์ติดต่อ' },
       { label: 'IG / Line' }, { label: 'สินค้าที่สั่ง' }, { label: 'วันที่สั่ง' }, { label: 'สลิป' },
     ],
@@ -402,8 +424,8 @@
     ]);
   }
 
-  function summary(rows) {
-    if (state.view === 'shirts') {
+  function summary(rows, view) {
+    if (view.kind === 'shirt') {
       const sizes = (state.data.sizes || []).slice();
       rows.forEach(r => { if (r.size && sizes.indexOf(r.size) === -1) sizes.push(r.size); });
       const items = sizes.map(s => [s, rows.filter(r => r.size === s).length]);
@@ -418,26 +440,29 @@
 
   function render() {
     const d = state.data;
-    const dated = { shirts: d.shirts.filter(inRange), caps: d.caps.filter(inRange) };
-    const rows = dated[state.view];
+    const views = viewList(d);
+    const view = currentView();
+    state.view = view.key;
+    const rows = rowsOf(view, true);
     const shown = rows.filter(matches);
 
-    $('count-shirts').textContent = dated.shirts.length;
-    $('count-caps').textContent = dated.caps.length;
-    document.querySelectorAll('.switch button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === state.view)));
-    $('q').placeholder = state.view === 'shirts' ? 'ชื่อหลังเสื้อ หรือเลข' : 'ชื่อ เบอร์ IG หรือห้อง';
+    $('switch').replaceChildren(...views.map(v => el('button', { type: 'button', 'data-view': v.key, 'aria-pressed': String(v.key === view.key) }, [
+      el('span', { class: 'label' }, [v.swatch ? el('span', { class: 'swatch ' + v.swatch, 'aria-hidden': 'true' }) : null, v.label]),
+      el('span', { class: 'num', text: String(rowsOf(v, true).length) }),
+    ])));
+    $('q').placeholder = view.kind === 'shirt' ? 'ชื่อหลังเสื้อ หรือเลข' : 'ชื่อ เบอร์ IG หรือห้อง';
     $('clear-dates').hidden = !state.from && !state.to;
 
-    const unit = state.view === 'shirts' ? 'ตัว' : 'ใบ';
+    const unit = view.kind === 'shirt' ? 'ตัว' : 'ใบ';
     const exportBtn = $('export');
     exportBtn.textContent = 'ดาวน์โหลด Excel (' + rows.length + ' ' + unit + ')';
     exportBtn.disabled = rows.length === 0;
 
-    const s = summary(rows);
+    const s = summary(rows, view);
     $('run').replaceChildren(...s.items.map(([k, v]) => runItem(k, v)), runItem(s.total[0], s.total[1], 'total'));
 
-    $('thead').replaceChildren(el('tr', null, columns[state.view].map(c => el('th', { scope: 'col', text: c.label }))));
-    const make = state.view === 'shirts' ? shirtRow : capRow;
+    $('thead').replaceChildren(el('tr', null, columns[view.kind].map(c => el('th', { scope: 'col', text: c.label }))));
+    const make = view.kind === 'shirt' ? shirtRow : capRow;
     $('tbody').replaceChildren(...shown.map(make));
 
     const empty = shown.length === 0;
@@ -476,16 +501,16 @@
     btn.textContent = 'กำลังสร้างไฟล์…';
     try {
       const XLSX = await loadXLSX();
-      const rows = state.data[state.view].filter(inRange);
+      const view = currentView();
+      const rows = rowsOf(view, true);
       const when = r => { const t = toDate(r.time); return t ? fullFmt.format(t).replace(',', '') : ''; };
       let header, body, widths, sheetName;
-      if (state.view === 'shirts') {
-        sheetName = 'เสื้อ';
+      sheetName = view.label.slice(0, 31);
+      if (view.kind === 'shirt') {
         header = ['ลำดับ', 'Size', 'ชื่อหลังเสื้อ', 'เลขหลังเสื้อ', 'วันที่สั่ง', 'ลิงก์สลิป'];
         body = rows.map((r, i) => [i + 1, r.size, r.name, String(r.number || ''), when(r), safeLink(r.slip)]);
         widths = [7, 8, 18, 12, 18, 45];
       } else {
-        sheetName = 'หมวก';
         header = ['ลำดับ', 'ชื่อ', 'ชั้น', 'ห้อง', 'เบอร์ติดต่อ', 'IG / Line', 'สินค้าที่สั่ง', 'วันที่สั่ง', 'ลิงก์สลิป'];
         body = rows.map((r, i) => [i + 1, r.name, r.grade, String(r.room || ''), String(r.phone || ''), r.social, r.product, when(r), safeLink(r.slip)]);
         widths = [7, 26, 10, 6, 14, 20, 26, 18, 45];
@@ -495,8 +520,8 @@
       ws['!cols'] = widths.map(w => ({ wch: w }));
       XLSX.utils.book_append_sheet(wb, ws, sheetName);
 
-      const s = summary(rows);
-      const sum = XLSX.utils.aoa_to_sheet([[state.view === 'shirts' ? 'Size' : 'รายการ', 'จำนวน']].concat(s.items, [s.total]));
+      const s = summary(rows, view);
+      const sum = XLSX.utils.aoa_to_sheet([[view.kind === 'shirt' ? 'Size' : 'รายการ', 'จำนวน']].concat(s.items, [s.total]));
       sum['!cols'] = [{ wch: 16 }, { wch: 10 }];
       XLSX.utils.book_append_sheet(wb, sum, 'สรุป');
 
@@ -573,10 +598,12 @@
   });
 
   // ---------- controls ----------
-  document.querySelectorAll('.switch button').forEach(b => b.addEventListener('click', () => {
+  $('switch').addEventListener('click', e => {
+    const b = e.target.closest('button[data-view]');
+    if (!b) return;
     state.view = b.dataset.view;
     render();
-  }));
+  });
   $('from').addEventListener('change', e => { state.from = e.target.value; render(); });
   $('to').addEventListener('change', e => { state.to = e.target.value; render(); });
   $('q').addEventListener('input', e => { state.q = e.target.value.trim(); render(); });
