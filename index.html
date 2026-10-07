@@ -113,7 +113,9 @@
     grid-template-columns: 1fr 1fr;
     margin-bottom: 18px;
   }
+  .filters > * { min-width: 0; }
   .filters .field { margin: 0; }
+  .filters input { min-width: 0; max-width: 100%; }
   .filters .search { grid-column: 1 / -1; }
   .filters .actions { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; }
   @media (min-width: 860px) {
@@ -127,8 +129,8 @@
   .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
 
   .run { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
-  .run div { padding: 14px 18px 12px; border-right: 1px solid var(--line); min-width: 76px; }
-  .run div:last-child { border-right: 0; margin-left: auto; background: var(--accent-soft); }
+  .run div { flex: 1 1 72px; padding: 14px 18px 12px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); margin-bottom: -1px; }
+  .run div:last-child { border-right: 0; background: var(--accent-soft); }
   .run dt { font-size: 13px; color: var(--muted); font-weight: 500; }
   .run dd { margin: 4px 0 0; font-size: 34px; }
   .run div.zero dd { color: var(--muted); opacity: 0.55; }
@@ -154,6 +156,12 @@
   td.flag .hint { display: block; font-size: 12px; font-weight: 400; letter-spacing: 0; }
   td.wrapcell { min-width: 140px; }
   td.nowrap { white-space: nowrap; }
+
+  @media (max-width: 600px) {
+    th, td { padding: 8px 10px; }
+    td.back-number .num { font-size: 26px; }
+    .run div { padding: 12px 12px 10px; }
+  }
 
   .empty { padding: 40px 20px; text-align: center; color: var(--muted); }
   .empty .btn { margin-top: 12px; }
