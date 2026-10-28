@@ -410,9 +410,10 @@
     rangeLabel.textContent = rangeText();
     rangeLabel.classList.toggle('active', hasRange);
 
+    // The file holds what is on screen: the date range, and the search when one is typed.
     const exportBtn = $('export');
-    exportBtn.textContent = 'ดาวน์โหลด Excel (' + countOf(view, rows) + ' ' + UNIT[view.kind] + ')';
-    exportBtn.disabled = rows.length === 0;
+    exportBtn.textContent = 'ดาวน์โหลด Excel (' + countOf(view, shown) + ' ' + UNIT[view.kind] + (state.q ? ' ที่ค้นพบ' : '') + ')';
+    exportBtn.disabled = shown.length === 0;
 
     const s = summary(rows, view);
     $('run').replaceChildren(...s.items.map(([k, v]) => runItem(k, v)), runItem(s.total[0], s.total[1], 'total'));
@@ -462,7 +463,7 @@
     try {
       if (!window.XlsxLite) throw new Error('โหลดตัวสร้างไฟล์ Excel ไม่ได้ รีเฟรชหน้าแล้วลองใหม่');
       const view = currentView();
-      const rows = rowsOf(view, true);
+      const rows = rowsOf(view, true).filter(matches);
       const when = (r) => { const t = toDate(r.time); return t ? fullFmt.format(t).replace(',', '') : ''; };
       let header, body, widths;
       const sheetName = view.label.slice(0, 31);
@@ -497,7 +498,8 @@
         ],
       });
       const range = state.from || state.to ? (state.from || 'เริ่ม') + '_ถึง_' + (state.to || 'ล่าสุด') : 'ทั้งหมด';
-      saveFile(blob, 'RCWD-' + sheetName + '-' + range + '.xlsx');
+      const found = state.q ? '-ค้นหา' : '';
+      saveFile(blob, 'RCWD-' + sheetName + '-' + range + found + '.xlsx');
     } catch (e) {
       toast(e.message || 'สร้างไฟล์ไม่สำเร็จ');
     } finally {

@@ -188,7 +188,7 @@ input[type="search"]::-webkit-search-results-button { -webkit-appearance: none; 
 /* date range + download: folded away on phones, always open on wide screens */
 .more { margin: 0 0 14px; }
 .more > summary {
-  list-style: none; display: flex; align-items: center; gap: 10px;
+  list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px;
   min-height: 44px; padding: 0 4px; cursor: pointer; color: var(--muted); font-size: 0.875rem;
 }
 .more > summary::-webkit-details-marker { display: none; }
@@ -198,7 +198,7 @@ input[type="search"]::-webkit-search-results-button { -webkit-appearance: none; 
 }
 .more[open] > summary::before { transform: rotate(-135deg); margin-top: 4px; }
 .more-title { font-weight: 500; color: var(--ink); }
-.more-state { margin-left: auto; text-align: right; }
+.more-state { margin-left: auto; text-align: right; white-space: nowrap; }
 .more-state.active { color: var(--accent-text); font-weight: 500; }
 .filters { display: grid; gap: 12px; align-items: end; grid-template-columns: 1fr 1fr; padding: 2px 0 4px; }
 .filters > * { min-width: 0; }
