@@ -1,0 +1,362 @@
+/* RCWD Jersey 2026 — served from this site (no inline styles, so the page's CSP is style-src 'self'). */
+
+:root {
+  --bg: #eef5f1;
+  --surface: #ffffff;
+  --ink: #12332b;
+  --muted: #4f6b60;        /* 5.3:1 on the page, 5.9:1 on white */
+  --line: #d3e3da;
+  --accent: #27805f;       /* fills and borders; white text on it is 4.8:1 */
+  --accent-text: #1f6f52;  /* links and coloured text: 5.5:1 on the page, 5.1:1 on the soft tint */
+  --accent-ink: #ffffff;
+  --accent-soft: #dcefe6;
+  --danger: #b4413a;
+  --danger-soft: #f8e1de;
+  --radius: 10px;
+  /* The notch / home-indicator areas on iPhones (viewport-fit=cover): never put content under them. */
+  --pad-l: max(16px, env(safe-area-inset-left));
+  --pad-r: max(16px, env(safe-area-inset-right));
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1a16;
+    --surface: #15261f;
+    --ink: #e4f1ea;
+    --muted: #9cb8ac;
+    --line: #27443a;
+    --accent: #5cc9a0;
+    --accent-text: #6fd3ad;
+    --accent-ink: #0e1a16;
+    --accent-soft: #1c3a30;
+    --danger: #f08a80;
+    --danger-soft: #3a1e1b;
+  }
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 16px/1.55 'Prompt', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+button, input, summary { font: inherit; color: inherit; }
+a { color: var(--accent-text); }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+[hidden] { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Taps: no grey flash from iOS, feedback comes from :active below; no double-tap zoom wait. */
+a, button, summary, label, input { -webkit-tap-highlight-color: transparent; }
+button, summary, .btn { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+/* iOS draws its own rounded "search" and text fields; we draw ours. Date fields keep the native picker look. */
+input[type="text"], input[type="search"], input[type="password"], input:not([type]) { -webkit-appearance: none; appearance: none; }
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-results-button { -webkit-appearance: none; display: none; }
+
+.framed { margin: 40px 16px; text-align: center; color: var(--muted); }
+
+.num { font-family: 'Teko', 'Prompt', sans-serif; font-weight: 600; letter-spacing: 0.02em; line-height: 1; }
+
+.wrap {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: calc(16px + env(safe-area-inset-top)) var(--pad-r) calc(40px + env(safe-area-inset-bottom)) var(--pad-l);
+}
+@media (min-width: 720px) {
+  .wrap { padding: calc(40px + env(safe-area-inset-top)) max(32px, env(safe-area-inset-right)) calc(64px + env(safe-area-inset-bottom)) max(32px, env(safe-area-inset-left)); }
+}
+
+/* ---------- wordmark ---------- */
+.mark { display: flex; align-items: baseline; gap: 10px; margin: 0; }
+.mark .num { font-size: 44px; color: var(--accent); }
+.mark > span:last-child { font-size: 18px; font-weight: 600; }
+.mark small { display: block; font-size: 14px; font-weight: 400; color: var(--muted); }
+.mark:focus { outline: none; }
+
+/* ---------- login ---------- */
+.login {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: calc(24px + env(safe-area-inset-top)) var(--pad-r) calc(24px + env(safe-area-inset-bottom)) var(--pad-l);
+}
+.login form {
+  width: 100%; max-width: 360px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  padding: 28px 24px 24px;
+}
+.login .mark { margin-bottom: 4px; }
+.login p.lead { margin: 0 0 22px; color: var(--muted); font-size: 15px; }
+.nowrap { white-space: nowrap; }
+.login label.field { display: block; font-size: 14px; font-weight: 500; margin: 0 0 6px; }
+.field-input {
+  display: block; width: 100%; min-height: 48px; margin: 0 0 14px;
+  padding: 11px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg);
+}
+.pw { position: relative; margin-bottom: 14px; }
+.pw .field-input { margin: 0; padding-right: 52px; }
+.pw-toggle {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  width: 44px; height: 44px; border: 0; border-radius: 8px; background: none; color: var(--muted);
+  display: grid; place-items: center; cursor: pointer;
+}
+.pw-toggle .eye-off { display: none; }
+.pw-toggle[aria-pressed="true"] .eye { display: none; }
+.pw-toggle[aria-pressed="true"] .eye-off { display: block; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 44px; padding: 8px 16px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--surface); cursor: pointer; font-weight: 500; text-decoration: none; color: var(--ink);
+  white-space: nowrap;
+}
+.btn:hover { border-color: var(--accent); }
+.btn:active { transform: translateY(1px); background: var(--accent-soft); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.primary:active { filter: brightness(0.94); background: var(--accent); }
+.btn[disabled] { opacity: 0.6; cursor: progress; transform: none; }
+.btn.icon-btn { width: 44px; padding: 0; }
+.btn.icon-btn svg { display: block; }
+.login .btn.primary { width: 100%; margin-top: 6px; min-height: 50px; }
+.error { color: var(--danger); font-size: 14px; margin: 12px 0 0; min-height: 1.4em; }
+.setup-note { margin: 18px 0 0; font-size: 14px; color: var(--muted); }
+
+/* ---------- dashboard header ---------- */
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 16px; margin-bottom: 20px; }
+.top-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* category switch */
+.switch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+@media (min-width: 720px) { .switch { grid-template-columns: repeat(auto-fill, 220px); } }
+.switch button {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  min-height: 56px; padding: 10px 14px; border-radius: var(--radius); border: 1px solid var(--line);
+  background: var(--surface); cursor: pointer; text-align: left;
+}
+.switch button:active { background: var(--accent-soft); }
+.switch .label { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; min-width: 0; }
+@media (max-width: 419px) {
+  .switch button { padding: 10px 12px; gap: 6px; }
+  .switch .label { font-size: 15px; gap: 6px; }
+  .switch button .num { font-size: 28px; }
+}
+.swatch { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--line); flex: none; }
+.swatch.green { background: #1f7a55; border-color: #1f7a55; }
+.swatch.white { background: #ffffff; border-color: #b9c9c0; }
+.switch button .num { font-size: 32px; color: var(--muted); flex: none; }
+.switch button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.switch button[aria-pressed="true"] .num { color: var(--accent-text); }
+
+/* search: one field that stays in reach while a long list scrolls on a phone */
+.searchbar { margin: 0 0 10px; }
+.search-box { position: relative; }
+.search-icon { position: absolute; left: 14px; top: 15px; color: var(--muted); pointer-events: none; }
+.search-box input {
+  width: 100%; min-height: 48px; padding: 10px 46px 10px 42px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+}
+.q-clear {
+  position: absolute; right: 2px; top: 2px; width: 44px; height: 44px;
+  border: 0; border-radius: 8px; background: none; color: var(--muted); cursor: pointer;
+  display: grid; place-items: center;
+}
+.q-clear:active { background: var(--accent-soft); }
+.status { margin: 6px 2px 0; font-size: 14px; color: var(--muted); }
+.status:empty { display: none; }
+@media (max-width: 719px) {
+  .searchbar {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+    margin: 0 calc(-1 * var(--pad-r)) 10px calc(-1 * var(--pad-l));
+    padding: 8px var(--pad-r) 6px var(--pad-l);
+    background: var(--bg);
+  }
+}
+
+/* date range + download: folded away on phones, always open on wide screens */
+.more { margin: 0 0 14px; }
+.more > summary {
+  list-style: none; display: flex; align-items: center; gap: 10px;
+  min-height: 44px; padding: 0 4px; cursor: pointer; color: var(--muted); font-size: 14px;
+}
+.more > summary::-webkit-details-marker { display: none; }
+.more > summary::before {
+  content: ''; flex: none; width: 8px; height: 8px; margin: -4px 4px 0 2px;
+  border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg);
+}
+.more[open] > summary::before { transform: rotate(-135deg); margin-top: 4px; }
+.more-title { font-weight: 500; color: var(--ink); }
+.more-state { margin-left: auto; text-align: right; }
+.more-state.active { color: var(--accent-text); font-weight: 500; }
+.filters { display: grid; gap: 12px; align-items: end; grid-template-columns: 1fr 1fr; padding: 2px 0 4px; }
+.filters > * { min-width: 0; }
+.filters .field { display: block; margin: 0; }
+.filters .field span { display: block; font-size: 14px; font-weight: 500; margin-bottom: 6px; }
+.filters input {
+  width: 100%; min-width: 0; max-width: 100%; min-height: 44px; padding: 9px 10px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--surface);
+}
+.filters .actions { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; }
+@media (min-width: 860px) {
+  .more > summary { display: none; }
+  .filters { grid-template-columns: 170px 170px auto; padding: 0; }
+  .filters .actions { grid-column: auto; }
+}
+
+/* panel with size run + list */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+
+.run { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin: 0; }
+.run div { flex: 1 1 72px; padding: 14px 18px 12px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); margin-bottom: -1px; }
+.run div:last-child { border-right: 0; background: var(--accent-soft); }
+.run dt { font-size: 13px; color: var(--muted); font-weight: 500; }
+.run dd { margin: 4px 0 0; font-size: 34px; }
+.run div.zero dd { color: var(--muted); }
+
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 15px; }
+th {
+  text-align: left; font-size: 13px; font-weight: 500; color: var(--muted);
+  padding: 10px 14px; border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+td.idx { color: var(--muted); width: 1%; white-space: nowrap; }
+td.when { color: var(--muted); white-space: nowrap; font-size: 14px; }
+td.size span {
+  display: inline-block; min-width: 44px; text-align: center;
+  padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; font-weight: 600; font-size: 14px;
+}
+/* the back of the jersey: name over a big number */
+td.back-name { font-weight: 600; letter-spacing: 0.06em; }
+td.back-number .num { font-size: 30px; display: inline-block; min-width: 2ch; }
+td.flag { color: var(--danger); }
+td.flag .hint { display: block; font-size: 12px; font-weight: 400; letter-spacing: 0; }
+td.name, td.product { min-width: 140px; }
+td.grade, td.phone, td.slip { white-space: nowrap; }
+/* ออเดอร์ #8-1 = ลำดับ 8 ในแท็บตรวจสลิป เสื้อตัวที่ 1 */
+td.order { color: var(--muted); font-size: 14px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+td.order .manual {
+  display: inline-block; padding: 1px 8px; font-size: 12px;
+  border: 1px dashed var(--line); border-radius: 999px;
+}
+td.qty .num { font-size: 26px; }
+td.muted { color: var(--muted); }
+
+/* จัดส่ง: ชื่อผู้รับ + เบอร์, ที่อยู่กับรายการตัดบรรทัด */
+td.who { min-width: 150px; }
+td.who strong { font-weight: 600; display: block; }
+.sub { display: block; color: var(--muted); font-size: 13px; white-space: pre-line; }
+td.addr { min-width: 220px; max-width: 340px; white-space: pre-line; }
+td.items { min-width: 200px; white-space: pre-line; font-size: 14px; }
+td.buyer { min-width: 130px; white-space: pre-line; font-size: 14px; }
+.tel {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 36px; margin-top: 4px; padding: 0 12px;
+  border: 1px solid var(--line); border-radius: 999px; text-decoration: none; font-size: 14px; font-weight: 500;
+  color: var(--accent-text); background: var(--surface);
+}
+.tel:active { background: var(--accent-soft); }
+.badge {
+  display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 600;
+  border: 1px solid var(--line); white-space: nowrap;
+}
+.badge.done { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-text); }
+.badge.wait { color: var(--muted); }
+.track { display: block; margin-top: 4px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.copy {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; min-height: 36px; padding: 4px 12px;
+  font-size: 13px; font-weight: 500; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--surface); cursor: pointer; color: var(--accent-text);
+}
+.copy:active { background: var(--accent-soft); }
+
+/* มือถือ: ทุกหมวดเป็นการ์ดทีละแถว ไม่ต้องเลื่อนตารางไปข้าง */
+@media (max-width: 719px) {
+  table thead { display: none; }
+  table, table tbody, table tr, table td { display: block; width: 100%; }
+  table tr { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  table tr:last-child { border-bottom: 0; }
+  table td { border: 0; padding: 0; min-width: 0; max-width: none; white-space: normal; }
+  table td.idx { display: none; }
+  table td[data-label]::before {
+    content: attr(data-label); display: block; font-size: 12px; font-weight: 500; color: var(--muted);
+  }
+  .tel, .copy { min-height: 44px; }
+  table td.slip a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; margin: -8px -4px; }
+
+  /* เสื้อ: ไซซ์ | ชื่อเหนือเลขใหญ่ (เหมือนหลังเสื้อ) | ออเดอร์ วันที่ สลิป */
+  table.shirt tr {
+    display: grid; grid-template-columns: auto 1fr auto;
+    grid-template-areas: "size name order" "size number when" "size number slip";
+    column-gap: 14px; row-gap: 0; align-items: start;
+  }
+  table.shirt td.size { grid-area: size; padding-top: 4px; }
+  table.shirt td.back-name { grid-area: name; font-size: 17px; line-height: 1.3; }
+  table.shirt td.back-number { grid-area: number; }
+  table.shirt td.back-number .num { font-size: 44px; line-height: 0.95; }
+  table.shirt td.order { grid-area: order; text-align: right; }
+  table.shirt td.when { grid-area: when; text-align: right; }
+  table.shirt td.slip { grid-area: slip; text-align: right; font-size: 14px; }
+  table.shirt td.back-name.flag .hint, table.shirt td.back-number.flag .hint { margin-top: 2px; }
+
+  /* หมวก: ชื่อ ชั้น/ห้อง เบอร์ IG สินค้า จำนวน */
+  table.cap tr {
+    display: grid; grid-template-columns: auto 1fr auto;
+    grid-template-areas: "name name qty" "grade room qty" "phone social social" "product product product" "order when slip";
+    column-gap: 10px; row-gap: 2px; align-items: start;
+  }
+  table.cap td.name { grid-area: name; font-weight: 600; font-size: 17px; line-height: 1.3; }
+  table.cap td.grade { grid-area: grade; }
+  table.cap td.room { grid-area: room; }
+  table.cap td.room:not(:empty)::before { content: 'ห้อง '; color: var(--muted); }
+  table.cap td.phone { grid-area: phone; }
+  table.cap td.social { grid-area: social; color: var(--muted); }
+  table.cap td.product { grid-area: product; margin-top: 4px; }
+  table.cap td.qty { grid-area: qty; text-align: right; }
+  table.cap td.qty .num { font-size: 34px; }
+  table.cap td.qty .num::after { content: ' ใบ'; font-family: 'Prompt', sans-serif; font-size: 13px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+  table.cap td.order { grid-area: order; }
+  table.cap td.when { grid-area: when; }
+  table.cap td.slip { grid-area: slip; text-align: right; }
+  table.cap td.order, table.cap td.when, table.cap td.slip { margin-top: 6px; font-size: 13px; }
+
+  /* จัดส่ง */
+  table.ship td { padding: 3px 0; }
+  table.ship td.addr, table.ship td.items, table.ship td.buyer { white-space: pre-line; }
+  table.ship td.who strong { font-size: 17px; }
+}
+
+.empty { padding: 40px 20px; text-align: center; color: var(--muted); }
+.empty .btn { margin-top: 12px; }
+
+.foot {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 4px 16px; margin-top: 14px; font-size: 14px; color: var(--muted);
+}
+.foot-right { display: inline-flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.link-btn { background: none; border: 0; padding: 10px 0; min-height: 44px; color: var(--accent-text); cursor: pointer; text-decoration: underline; }
+.mode-note { font-size: 13px; }
+
+.loading { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; color: var(--muted); }
+
+/* short messages (errors, "copied") above the home indicator */
+.toast {
+  cursor: pointer;
+  position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  max-width: calc(100% - 32px); padding: 10px 16px; border-radius: 999px; z-index: 20;
+  background: var(--ink); color: var(--bg); font-size: 14px; text-align: center;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .switch button, .btn, .copy, .tel { transition: border-color 0.15s, background-color 0.15s, transform 0.1s; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn:active { transform: none; }
+}

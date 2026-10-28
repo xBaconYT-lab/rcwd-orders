@@ -1,0 +1,2 @@
+Installed from https://github.com/dickwu/apple-design-skill (commit 914b6a3), the "Claude Code, by hand" method from its README: the skill folder holds SKILL.md and references/ only.
+Update: `npx skills update apple-design` or re-copy those two from a fresh clone.
