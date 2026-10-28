@@ -1,0 +1,43 @@
+/**
+ * Code.gs.sample — ตัวอย่าง doPost ที่ใช้ Auth.gs (ไม่ใช่โค้ดอ่านชีต: ส่วนนั้นเป็นของคุณอยู่แล้ว)
+ *
+ * วิธีแก้สคริปต์เดิม:
+ *  1. เพิ่มไฟล์ Auth.gs (คัดลอกทั้งไฟล์)
+ *  2. ใน doPost เดิม แทนที่ส่วนที่เช็กชื่อผู้ใช้/รหัสผ่านด้วย 3 บรรทัดแรกด้านล่าง
+ *     และส่ง token/expiresAt กลับไปพร้อมข้อมูล
+ *  3. ลบรหัสผ่านที่เคยเขียนไว้ในโค้ด แล้วรัน SETUP_setPassword ใน Auth.gs หนึ่งครั้ง
+ *  4. Deploy > Manage deployments > Edit > Version: New version (ลิงก์ /exec เดิมใช้ต่อได้)
+ *
+ * หน้าเว็บเวอร์ชันใหม่ใช้ได้กับสคริปต์เวอร์ชันเก่าด้วย (จะไม่จำการเข้าสู่ระบบข้ามการรีเฟรช)
+ * และหน้าเว็บเวอร์ชันเก่าก็ยังเข้าสคริปต์เวอร์ชันใหม่ได้ (ส่ง username/password แบบเดิม)
+ */
+
+function doPost(e) {
+  var auth = Auth.handle(e);
+  if (!auth.ok) return Auth.json(auth);
+  if (auth.action === 'logout') return Auth.json({ ok: true });
+
+  var data = buildData(); // โค้ดเดิมของคุณที่อ่านแท็บ Jersey เขียว / Jersey ขาว / หมวก RCWD / จัดส่ง
+
+  return Auth.json(Object.assign({ ok: true, token: auth.token, expiresAt: auth.expiresAt }, data));
+}
+
+// เปิดลิงก์ /exec ตรง ๆ ในเบราว์เซอร์: ไม่มีข้อมูลอะไรออกไป
+function doGet() {
+  return Auth.json({ ok: false, error: 'ใช้ผ่านหน้าเว็บ RCWD Jersey 2026 เท่านั้น', code: 'bad_request' });
+}
+
+/**
+ * โค้ดเดิมของคุณ: คืน object ที่หน้าเว็บคาดหวัง เช่น
+ * {
+ *   updatedAt: new Date().toISOString(), sheetUrl: ss.getUrl(), onlyVerified: true,
+ *   sizes: ['S','M','L','XL','2XL','3XL'], colors: ['เขียว','ขาว'], capLabel: 'หมวก RCWD', shipLabel: 'จัดส่ง',
+ *   shirts: [{ order, time, color, size, name, number, slip }],
+ *   caps:   [{ order, time, name, grade, room, phone, social, product, qty, slip }],
+ *   shipping: [{ order, time, name, phone, address, items, buyer, contact, shipped, tracking, slip }],
+ * }
+ * ส่งเฉพาะคอลัมน์ที่หน้าเว็บใช้ (ไม่ต้องส่งอีเมลหรือคอลัมน์อื่นของฟอร์ม) จะได้ไม่มีข้อมูลเกินออกไป
+ */
+function buildData() {
+  throw new Error('วางโค้ดอ่านชีตเดิมของคุณในฟังก์ชันนี้');
+}
