@@ -21,12 +21,20 @@
   const DEMO = new URLSearchParams(location.search).has('demo');
   const SESSION_KEY = 'rcwd-session';
   const UI_KEY = 'rcwd-ui';            // the last category opened (no personal data), so the app reopens where it was
+  const PRICING_KEY = 'rcwd-pricing';  // prices and costs used by the profit view (no personal data)
+  const REFRESH_EVERY_MS = 3 * 60 * 1000; // while the page is open and visible, the numbers follow the sheet
+  // ราคาและต้นทุนตาม "บันทึกข้อความ การจัดทำและจัดจำหน่ายของที่ระลึก คณะราชาวดี 2569" (เอกสารแนบ ข้อ 1-2)
+  const PRICING_DEFAULTS = {
+    shirtPrice: 299, capPrice: 279, pairPrice: 590, shirtCapPrice: 570, fullSetPrice: 849,
+    shirtCost: 240, shirt3xlCost: 260, capCost: 220,
+    shipCostPerOrder: 0, otherCost: 0,
+  };
   const LEGACY_KEYS = ['rcwd-auth']; // older versions kept the password here
   const STALE_MS = 5 * 60 * 1000;    // auto-refresh when the tab comes back after this long
   const FETCH_TIMEOUT_MS = 25000;
   const STANDALONE = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
 
-  const state = { data: null, auth: null, view: '', from: '', to: '', q: '', loadedAt: 0, busy: false, withOrder: false, withQty: false };
+  const state = { data: null, auth: null, view: '', from: '', to: '', q: '', loadedAt: 0, busy: false, withOrder: false, withQty: false, pricing: null };
   const $ = (id) => document.getElementById(id);
 
   // ---------- helpers ----------
@@ -41,6 +49,9 @@
   const shortDate = (iso) => { const t = toDate(iso); return t ? shortFmt.format(t) : '-'; };
   const dayLabel = (ymd) => { const t = toDate(ymd + 'T00:00:00'); return t ? dayFmt.format(t) : ymd; };
   const text = (v) => (v === null || v === undefined ? '' : String(v));
+  const bahtFmt = new Intl.NumberFormat('th-TH', { maximumFractionDigits: 0 });
+  const baht = (n) => bahtFmt.format(Math.round(Number(n) || 0));
+  const pct = (n) => (Number.isFinite(n) ? (Math.round(n * 10) / 10).toLocaleString('th-TH', { maximumFractionDigits: 1 }) + '%' : '-');
 
   function el(tag, props, children) {
     const node = document.createElement(tag);
@@ -101,6 +112,22 @@
   function writeUi(v) {
     try { localStorage.setItem(UI_KEY, JSON.stringify(v)); } catch (e) { /* ignore */ }
   }
+  function readPricing() {
+    const out = Object.assign({}, PRICING_DEFAULTS);
+    try {
+      const v = JSON.parse(localStorage.getItem(PRICING_KEY) || 'null');
+      if (v && typeof v === 'object') {
+        for (const k of Object.keys(PRICING_DEFAULTS)) {
+          const n = Number(v[k]);
+          if (Number.isFinite(n) && n >= 0) out[k] = n;
+        }
+      }
+    } catch (e) { /* ignore */ }
+    return out;
+  }
+  function writePricing(v) {
+    try { localStorage.setItem(PRICING_KEY, JSON.stringify(v)); } catch (e) { /* ignore */ }
+  }
   function forgetLegacy() {
     try { for (const k of LEGACY_KEYS) { sessionStorage.removeItem(k); localStorage.removeItem(k); } } catch (e) { /* ignore */ }
   }
@@ -152,22 +179,31 @@
     const names = ['TEST', 'DEMO', 'SAMPLE', 'RCWD', 'GREEN', 'HOUSE', 'TEAM', 'CHEER', 'DRUM', 'FLAG', 'STAND', 'PARADE', 'VERYLONGNAME', 'BLUE'];
     const sizes = ['M', 'L', 'S', 'XL', 'M', '2XL', 'L', 'M', 'S', 'M', '3XL', 'L', 'M', 'XL'];
     const day = (d) => new Date(Date.UTC(2026, 9, d, 4 + (d % 5), 10 + d)).toISOString();
+    // ออเดอร์ #9 มีเสื้อ 2 สี + หมวก (ครบเซ็ต), #2 มีเสื้อ + หมวก, #21 หมวก 3 ใบ: ตรงกับรายการจัดส่งตัวอย่างด้านล่าง
+    const orders = ['#1-1', '#2-1', '#3-1', '#4-1', '#5-1', '#6-1', '#7-1', '#8-1', '#12-1', '#9-1', '#9-2', '#13-1', '#14-1', '#15-1'];
     const shirts = names.map((n, i) => ({
-      order: '#' + (i + 1) + '-1', time: day(3 + (i % 5)), color: i % 3 === 0 ? 'ขาว' : 'เขียว', size: sizes[i], name: n,
+      order: orders[i], time: day(3 + (i % 5)), color: i % 3 === 0 ? 'ขาว' : 'เขียว', size: sizes[i], name: n,
       number: i === 5 ? '1234' : String((i * 7) % 99).padStart(i % 4 === 0 ? 2 : 1, '0'), piece: 1, slip: '',
     }));
     shirts.push({ order: '', time: '', color: 'เขียว', size: 'M', name: 'STAFF', number: '0', slip: '' });
+    const capOrders = [
+      { order: '#2', product: 'RCWD Jersey + หมวก RCWD', qty: 1 },
+      { order: '#21', product: 'หมวก RCWD', qty: 3 },
+      { order: '#9', product: 'RCWD Jersey + หมวก RCWD', qty: 1 },
+      { order: '#23', product: 'หมวก RCWD', qty: 2 },
+      { order: '#24', product: 'RCWD Jersey + หมวก RCWD', qty: 1 },
+    ];
     const caps = ['ตัวอย่าง หนึ่ง', 'ตัวอย่าง สอง', 'ตัวอย่าง สาม', 'ตัวอย่าง สี่', 'ตัวอย่าง ห้า'].map((n, i) => ({
-      order: '#' + (20 + i), time: day(4 + (i % 4)), name: n, grade: 'ม.' + (i + 1), room: String(i + 2), phone: '0800000' + String(100 + i),
-      social: '@demo' + (i + 1), product: i % 2 ? 'หมวก RCWD' : 'RCWD Jersey + หมวก RCWD', qty: i === 1 ? 3 : i === 3 ? 2 : 1, slip: '',
+      order: capOrders[i].order, time: day(4 + (i % 4)), name: n, grade: 'ม.' + (i + 1), room: String(i + 2), phone: '0800000' + String(100 + i),
+      social: '@demo' + (i + 1), product: capOrders[i].product, qty: capOrders[i].qty, slip: '',
     }));
     const shipping = [
       { order: '#2', time: day(3), name: 'ผู้รับ ตัวอย่าง', phone: '0811111111', address: '99/1 ถ.ตัวอย่าง แขวงสามเสนใน เขตพญาไท กรุงเทพฯ 10400',
-        items: 'Jersey เขียว · L · DEMO · 7', buyer: 'ตัวอย่าง สอง\nม.5 ห้อง 2', contact: '0800000101\n@demo2', shipped: true, tracking: 'TH0000000001', slip: '' },
+        items: 'Jersey เขียว · L · DEMO · 7\nหมวก RCWD 1 ใบ', buyer: 'ตัวอย่าง สอง\nม.5 ห้อง 2', contact: '0800000101\n@demo2', shipped: true, tracking: 'TH0000000001', slip: '' },
       { order: '#21', time: day(5), name: 'ผู้ปกครอง ตัวอย่าง', phone: '0822222222', address: '12 หมู่ 3 ต.ตัวอย่าง อ.ตัวอย่าง นนทบุรี 11120',
         items: 'หมวก RCWD 3 ใบ', buyer: 'ตัวอย่าง สอง\nม.2 ห้อง 3', contact: '0800000101\n@demo2', shipped: false, tracking: '', slip: '' },
       { order: '#9', time: day(6), name: 'ป้า ตัวอย่าง', phone: '0833333333', address: 'คอนโดตัวอย่าง ห้อง 1201\nซอยตัวอย่าง 3',
-        items: 'Jersey ขาว · M · FLAG · 63\nJersey เขียว · M · STAND · 70\nหมวก RCWD 1 ใบ', buyer: 'ตัวอย่าง สาม\nม.3 ห้อง 4', contact: '0800000102\n@demo3', shipped: false, tracking: '', slip: '' },
+        items: 'Jersey ขาว · M · FLAG · 63\nJersey เขียว · 3XL · STAND · 70\nหมวก RCWD 1 ใบ', buyer: 'ตัวอย่าง สาม\nม.3 ห้อง 4', contact: '0800000102\n@demo3', shipped: false, tracking: '', slip: '' },
     ];
     return Promise.resolve({ ok: true, demo: true, updatedAt: new Date().toISOString(), sheetUrl: '', onlyVerified: true,
       sizes: ['S', 'M', 'L', 'XL', '2XL', '3XL'], colors: ['เขียว', 'ขาว'], capLabel: 'หมวก RCWD', shipLabel: 'จัดส่ง', shirts, caps, shipping });
@@ -190,6 +226,7 @@
     }));
     views.push({ key: 'caps', kind: 'cap', label: d.capLabel || 'หมวก' });
     if (d.shipping) views.push({ key: 'ship', kind: 'ship', label: d.shipLabel || 'จัดส่ง' });
+    views.push({ key: 'profit', kind: 'profit', label: 'กำไร' });
     return views;
   }
   function currentView() {
@@ -199,13 +236,143 @@
   function rowsOf(view, onlyInRange) {
     const base = view.kind === 'cap' ? state.data.caps
       : view.kind === 'ship' ? (state.data.shipping || [])
+      : view.kind === 'profit' ? state.data.shirts.concat(state.data.caps)
       : state.data.shirts.filter((r) => view.color === null || text(r.color) === view.color);
     return onlyInRange ? base.filter(inRange) : base;
   }
-  // หมวกนับเป็นใบ (ออเดอร์หนึ่งสั่งได้หลายใบ) ที่เหลือนับแถว
+  // หมวกนับเป็นใบ (ออเดอร์หนึ่งสั่งได้หลายใบ) ที่เหลือนับแถว; หมวดกำไรโชว์ยอดกำไร (บาท)
   const qtyOf = (r) => Math.max(1, Number(r.qty) || 1);
-  const countOf = (view, rows) => (view.kind === 'cap' ? rows.reduce((t, r) => t + qtyOf(r), 0) : rows.length);
-  const UNIT = { shirt: 'ตัว', cap: 'ใบ', ship: 'ออเดอร์' };
+  const countOf = (view, rows) => (view.kind === 'cap' ? rows.reduce((t, r) => t + qtyOf(r), 0)
+    : view.kind === 'profit' ? computeProfit().profit
+    : rows.length);
+  const UNIT = { shirt: 'ตัว', cap: 'ใบ', ship: 'ออเดอร์', profit: 'บาท' };
+
+  // ---------- กำไร ----------
+  // Groups the rows in the chosen date range by order number (#8-1 and #8 belong to order 8) and prices
+  // each order at the cheapest bundle its items form (ครบเซ็ต > เสื้อ 2 สี > เสื้อ + หมวก > ชิ้นเดี่ยว), then
+  // subtracts the unit costs and the extra costs. A row with a numeric `amount` from the sheet (a newer
+  // script could send what was actually paid) wins over the bundle estimate for its order.
+  const orderNo = (row) => { const m = /^#(\d+)/.exec(text(row.order)); return m ? m[1] : null; };
+  const is3xl = (row) => /^3\s*xl$/i.test(text(row.size).trim());
+  function computeProfit() {
+    const P = state.pricing || PRICING_DEFAULTS;
+    const shirts = state.data.shirts.filter(inRange);
+    const caps = state.data.caps.filter(inRange);
+    const shipping = (state.data.shipping || []).filter(inRange);
+    const groups = new Map();
+    let manual = 0;
+    const groupFor = (row) => {
+      const key = orderNo(row) || ('manual:' + (manual++));
+      if (!groups.has(key)) groups.set(key, { green: 0, white: 0, shirts: 0, caps: 0, amount: null });
+      return groups.get(key);
+    };
+    const cost = { green: 0, white: 0, greenQty: 0, whiteQty: 0, shirt3xl: 0, capQty: 0 };
+    for (const r of shirts) {
+      const g = groupFor(r);
+      const colour = text(r.color);
+      if (colour === 'ขาว') { g.white++; cost.whiteQty++; } else { g.green++; cost.greenQty++; }
+      g.shirts++;
+      const unit = is3xl(r) ? P.shirt3xlCost : P.shirtCost;
+      if (is3xl(r)) cost.shirt3xl++;
+      if (colour === 'ขาว') cost.white += unit; else cost.green += unit;
+      if (Number.isFinite(Number(r.amount)) && r.amount !== '' && r.amount !== null) g.amount = (g.amount || 0) + Number(r.amount);
+    }
+    for (const r of caps) {
+      const g = groupFor(r);
+      g.caps += qtyOf(r);
+      cost.capQty += qtyOf(r);
+      if (Number.isFinite(Number(r.amount)) && r.amount !== '' && r.amount !== null) g.amount = (g.amount || 0) + Number(r.amount);
+    }
+    const bundles = { fullSet: 0, pair: 0, shirtCap: 0, shirt: 0, cap: 0 };
+    let revenue = 0;
+    let fromSheet = 0;
+    for (const g of groups.values()) {
+      if (g.amount !== null) { revenue += g.amount; fromSheet++; continue; }
+      let { green, white, caps: c } = g;
+      while (green > 0 && white > 0 && c > 0) { bundles.fullSet++; revenue += P.fullSetPrice; green--; white--; c--; }
+      while (green > 0 && white > 0) { bundles.pair++; revenue += P.pairPrice; green--; white--; }
+      let loose = green + white;
+      while (loose > 0 && c > 0) { bundles.shirtCap++; revenue += P.shirtCapPrice; loose--; c--; }
+      bundles.shirt += loose; revenue += loose * P.shirtPrice;
+      bundles.cap += c; revenue += c * P.capPrice;
+    }
+    const capCost = cost.capQty * P.capCost;
+    const shipCost = shipping.length * P.shipCostPerOrder;
+    const totalCost = cost.green + cost.white + capCost + shipCost + P.otherCost;
+    const profit = revenue - totalCost;
+    return {
+      orders: groups.size, revenue, bundles, cost, capCost, shipCost, shipOrders: shipping.length, otherCost: P.otherCost,
+      totalCost, profit, margin: revenue > 0 ? (profit / revenue) * 100 : NaN, fromSheet,
+      shirtQty: cost.greenQty + cost.whiteQty, capQty: cost.capQty, withOrder: state.withOrder,
+    };
+  }
+
+  // On phones the row folds to two lines: the label, then "qty × unit" in small print (prefix = "×",
+  // or a word such as อัตรากำไร for the grand row), with the total on the right.
+  function ledgerRow(label, qty, unit, total, cls, prefix) {
+    const zero = total === 0 && !(cls || '').includes('total');
+    return el('tr', { class: ((cls || '') + (zero ? ' zero' : '')).trim() || null }, [
+      el('td', { class: 'label', text: label }),
+      el('td', { class: 'qty-col', text: qty }),
+      el('td', { class: 'amount unit', 'data-prefix': unit ? (prefix || '×') : null, text: unit }),
+      el('td', { class: 'amount total-col' + (total < 0 ? ' neg' : ''), text: baht(total) }),
+    ]);
+  }
+  function sectionRow(label) {
+    return el('tr', { class: 'section' }, [el('th', { scope: 'colgroup', colspan: '4', text: label })]);
+  }
+
+  function renderProfit(view) {
+    const P = state.pricing;
+    const r = computeProfit();
+    $('run').replaceChildren(
+      runItem('รายได้', baht(r.revenue)),
+      runItem('ต้นทุน', baht(r.totalCost)),
+      (() => { const item = runItem('กำไร', baht(r.profit), 'total'); if (r.profit < 0) item.querySelector('dd').classList.add('neg'); return item; })(),
+      runItem('อัตรากำไร', pct(r.margin)),
+    );
+    $('thead').replaceChildren(el('tr', null, [
+      el('th', { scope: 'col', text: 'รายการ' }),
+      el('th', { scope: 'col', text: 'จำนวน' }),
+      el('th', { scope: 'col', class: 'amount', text: 'ต่อหน่วย' }),
+      el('th', { scope: 'col', class: 'amount', text: 'รวม (บาท)' }),
+    ]));
+    const b = r.bundles;
+    const shirtUnit = P.shirt3xlCost !== P.shirtCost ? baht(P.shirtCost) + ' (3XL ' + baht(P.shirt3xlCost) + ')' : baht(P.shirtCost);
+    const rows = [
+      sectionRow('รายได้ (จากรายการที่สลิปผ่านแล้ว ' + r.orders + ' ออเดอร์)'),
+      ledgerRow('ครบเซ็ต เสื้อ 2 สี + หมวก', b.fullSet + ' ชุด', baht(P.fullSetPrice), b.fullSet * P.fullSetPrice),
+      ledgerRow('เสื้อ 2 สี', b.pair + ' ชุด', baht(P.pairPrice), b.pair * P.pairPrice),
+      ledgerRow('เสื้อ + หมวก', b.shirtCap + ' ชุด', baht(P.shirtCapPrice), b.shirtCap * P.shirtCapPrice),
+      ledgerRow('เสื้อเดี่ยว', b.shirt + ' ตัว', baht(P.shirtPrice), b.shirt * P.shirtPrice),
+      ledgerRow('หมวกเดี่ยว', b.cap + ' ใบ', baht(P.capPrice), b.cap * P.capPrice),
+      r.fromSheet ? ledgerRow('ยอดที่ชีตระบุเอง', r.fromSheet + ' ออเดอร์', '', r.revenue - (b.fullSet * P.fullSetPrice + b.pair * P.pairPrice + b.shirtCap * P.shirtCapPrice + b.shirt * P.shirtPrice + b.cap * P.capPrice)) : null,
+      ledgerRow('รวมรายได้', '', '', r.revenue, 'total'),
+      sectionRow('ต้นทุน'),
+      ledgerRow('Jersey เขียว', r.cost.greenQty + ' ตัว', shirtUnit, r.cost.green),
+      ledgerRow('Jersey ขาว', r.cost.whiteQty + ' ตัว', shirtUnit, r.cost.white),
+      ledgerRow('หมวก RCWD', r.capQty + ' ใบ', baht(P.capCost), r.capCost),
+      ledgerRow('ค่าส่งพัสดุ', r.shipOrders + ' ออเดอร์', baht(P.shipCostPerOrder), r.shipCost),
+      ledgerRow('ค่าใช้จ่ายอื่น ๆ', '', '', r.otherCost),
+      ledgerRow('รวมต้นทุน', '', '', r.totalCost, 'total'),
+      ledgerRow('กำไร', r.orders + ' ออเดอร์', pct(r.margin), r.profit, 'total grand', 'อัตรากำไร'),
+    ].filter(Boolean);
+    $('tbody').replaceChildren(...rows);
+    $('empty').hidden = true;
+    const note = $('profit-note') || el('p', { id: 'profit-note', class: 'profit-note' });
+    note.textContent = (r.withOrder
+      ? 'คิดราคาจากของในออเดอร์เดียวกัน (เลขออเดอร์เดียวกัน) ตามชุดที่ถูกที่สุด '
+      : 'สคริปต์รุ่นนี้ไม่ส่งเลขออเดอร์ จึงคิดราคาแยกชิ้นทุกรายการ ')
+      + 'ต้นทุนเสื้อ ' + baht(P.shirtCost) + ' (3XL ' + baht(P.shirt3xlCost) + ') หมวก ' + baht(P.capCost) + ' บาท ตัวเลขอัปเดตทุกครั้งที่ดึงข้อมูล';
+    $('thead').closest('.panel').append(note);
+    $('pricing').hidden = false;
+    $('pricing-state').textContent = Object.keys(PRICING_DEFAULTS).every((k) => P[k] === PRICING_DEFAULTS[k]) ? 'ตามบันทึกข้อความ ต.ค. 2569' : 'แก้ไขเอง';
+  }
+
+  function syncPricingForm() {
+    const P = state.pricing;
+    for (const input of document.querySelectorAll('#pricing-form [data-price]')) input.value = String(P[input.dataset.price]);
+  }
 
   function inRange(row) {
     if (!state.from && !state.to) return true;
@@ -391,19 +558,24 @@
     state.withOrder = has(d.shirts.concat(d.caps, d.shipping || []), 'order');
     state.withQty = has(d.caps, 'qty');
     const rows = rowsOf(view, true);
-    const shown = rows.filter(matches);
+    const shown = view.kind === 'profit' ? rows : rows.filter(matches);
 
     $('switch').replaceChildren(...views.map((v) => el('button', { type: 'button', 'data-view': v.key, 'aria-pressed': String(v.key === view.key) }, [
       el('span', { class: 'label' }, [v.swatch ? el('span', { class: 'swatch ' + v.swatch, 'aria-hidden': 'true' }) : null, v.label]),
-      el('span', { class: 'num', text: String(countOf(v, rowsOf(v, true))) }),
+      el('span', { class: 'num', text: v.kind === 'profit' ? baht(countOf(v, rowsOf(v, true))) : String(countOf(v, rowsOf(v, true))) }),
     ])));
+    const isProfit = view.kind === 'profit';
+    $('searchbar').hidden = isProfit;
     $('q').placeholder = (view.kind === 'shirt' ? 'ชื่อหลังเสื้อ หรือเลข'
       : view.kind === 'ship' ? 'ชื่อ เบอร์ ที่อยู่ หรือเลขพัสดุ'
       : 'ชื่อ เบอร์ IG หรือห้อง') + (state.withOrder ? ' หรือ #ออเดอร์' : '');
     $('q-clear').hidden = !state.q;
-    $('status').textContent = state.q
+    $('status').textContent = state.q && !isProfit
       ? (shown.length ? 'พบ ' + shown.length + ' ' + UNIT[view.kind] : 'ไม่พบ "' + state.q + '"')
       : '';
+    const oldNote = $('profit-note');
+    if (oldNote && !isProfit) oldNote.remove();
+    $('pricing').hidden = !isProfit;
     $('clear-dates').hidden = !state.from && !state.to;
     const hasRange = !!(state.from || state.to);
     const rangeLabel = $('range-label');
@@ -412,16 +584,21 @@
 
     // The file holds what is on screen: the date range, and the search when one is typed.
     const exportBtn = $('export');
-    exportBtn.textContent = 'ดาวน์โหลด Excel (' + countOf(view, shown) + ' ' + UNIT[view.kind] + (state.q ? ' ที่ค้นพบ' : '') + ')';
+    exportBtn.textContent = isProfit
+      ? 'ดาวน์โหลด Excel (สรุปกำไร)'
+      : 'ดาวน์โหลด Excel (' + countOf(view, shown) + ' ' + UNIT[view.kind] + (state.q ? ' ที่ค้นพบ' : '') + ')';
     exportBtn.disabled = shown.length === 0;
 
-    const s = summary(rows, view);
-    $('run').replaceChildren(...s.items.map(([k, v]) => runItem(k, v)), runItem(s.total[0], s.total[1], 'total'));
-
-    $('thead').closest('table').className = view.kind;
-    $('thead').replaceChildren(el('tr', null, columnsFor(view.kind).map((label) => el('th', { scope: 'col', text: label }))));
-    const make = view.kind === 'shirt' ? shirtRow : view.kind === 'ship' ? shipRow : capRow;
-    $('tbody').replaceChildren(...shown.map(make));
+    $('thead').closest('table').className = isProfit ? 'profit' : view.kind + ' cards';
+    if (isProfit) {
+      renderProfit(view);
+    } else {
+      const s = summary(rows, view);
+      $('run').replaceChildren(...s.items.map(([k, v]) => runItem(k, v)), runItem(s.total[0], s.total[1], 'total'));
+      $('thead').replaceChildren(el('tr', null, columnsFor(view.kind).map((label) => el('th', { scope: 'col', text: label }))));
+      const make = view.kind === 'shirt' ? shirtRow : view.kind === 'ship' ? shipRow : capRow;
+      $('tbody').replaceChildren(...shown.map(make));
+    }
 
     const empty = shown.length === 0;
     $('empty').hidden = !empty;
@@ -474,7 +651,9 @@
       // ช่องที่มีหลายบรรทัด (รายการ ผู้สั่ง) ต่อกันด้วย " / " จะได้อ่านง่ายใน Excel
       const oneLine = (v) => text(v).split('\n').map((x) => x.trim()).filter(Boolean).join(' / ');
       const qtyHead = state.withQty ? ['จำนวน (ใบ)'] : [];
-      if (view.kind === 'shirt') {
+      if (view.kind === 'profit') {
+        header = []; body = []; widths = [];
+      } else if (view.kind === 'shirt') {
         header = ['ลำดับ', 'Size', 'ชื่อหลังเสื้อ', 'เลขหลังเสื้อ'].concat(orderHead, ['วันที่สั่ง', 'ลิงก์สลิป']);
         body = rows.map((r, i) => [i + 1, text(r.size), text(r.name), text(r.number)].concat(order(r), [when(r), safeLink(r.slip)]));
         widths = [7, 8, 18, 12].concat(orderWidth, [18, 45]);
@@ -489,14 +668,41 @@
           .concat(state.withQty ? [qtyOf(r)] : [], order(r), [when(r), safeLink(r.slip)]));
         widths = [7, 26, 10, 6, 14, 20, 26].concat(state.withQty ? [10] : [], orderWidth, [18, 45]);
       }
-      const s = summary(rows, view);
-      const sumHead = [view.kind === 'shirt' ? 'Size' : view.kind === 'ship' ? 'สถานะ' : 'รายการ', 'จำนวน'];
-      const blob = window.XlsxLite.build({
-        sheets: [
+      let sheets;
+      if (view.kind === 'profit') {
+        const P = state.pricing;
+        const r = computeProfit();
+        const b = r.bundles;
+        const ledger = [
+          ['รายการ', 'จำนวน', 'ต่อหน่วย (บาท)', 'รวม (บาท)'],
+          ['รายได้'],
+          ['ครบเซ็ต เสื้อ 2 สี + หมวก', b.fullSet, P.fullSetPrice, b.fullSet * P.fullSetPrice],
+          ['เสื้อ 2 สี', b.pair, P.pairPrice, b.pair * P.pairPrice],
+          ['เสื้อ + หมวก', b.shirtCap, P.shirtCapPrice, b.shirtCap * P.shirtCapPrice],
+          ['เสื้อเดี่ยว', b.shirt, P.shirtPrice, b.shirt * P.shirtPrice],
+          ['หมวกเดี่ยว', b.cap, P.capPrice, b.cap * P.capPrice],
+          r.fromSheet ? ['ยอดที่ชีตระบุเอง', r.fromSheet + ' ออเดอร์', '', r.revenue - (b.fullSet * P.fullSetPrice + b.pair * P.pairPrice + b.shirtCap * P.shirtCapPrice + b.shirt * P.shirtPrice + b.cap * P.capPrice)] : null,
+          ['รวมรายได้', '', '', r.revenue],
+          ['ต้นทุน'],
+          ['Jersey เขียว', r.cost.greenQty, P.shirtCost, r.cost.green],
+          ['Jersey ขาว', r.cost.whiteQty, P.shirtCost, r.cost.white],
+          ['เสื้อไซซ์ 3XL (รวมอยู่ด้านบน)', r.cost.shirt3xl, P.shirt3xlCost, ''],
+          ['หมวก RCWD', r.capQty, P.capCost, r.capCost],
+          ['ค่าส่งพัสดุ', r.shipOrders, P.shipCostPerOrder, r.shipCost],
+          ['ค่าใช้จ่ายอื่น ๆ', '', '', r.otherCost],
+          ['รวมต้นทุน', '', '', r.totalCost],
+          ['กำไร', r.orders + ' ออเดอร์', pct(r.margin), r.profit],
+        ].filter(Boolean);
+        sheets = [{ name: 'กำไร', rows: ledger, widths: [34, 12, 16, 14] }];
+      } else {
+        const s = summary(rows, view);
+        const sumHead = [view.kind === 'shirt' ? 'Size' : view.kind === 'ship' ? 'สถานะ' : 'รายการ', 'จำนวน'];
+        sheets = [
           { name: sheetName, rows: [header].concat(body), widths },
           { name: 'สรุป', rows: [sumHead].concat(s.items, [s.total]), widths: [16, 10] },
-        ],
-      });
+        ];
+      }
+      const blob = window.XlsxLite.build({ sheets });
       const range = state.from || state.to ? (state.from || 'เริ่ม') + '_ถึง_' + (state.to || 'ล่าสุด') : 'ทั้งหมด';
       const found = state.q ? '-ค้นหา' : '';
       saveFile(blob, 'RCWD-' + sheetName + '-' + range + found + '.xlsx');
@@ -662,6 +868,36 @@
   $('clear-dates').addEventListener('click', clearDates);
   $('empty-reset').addEventListener('click', clearDates);
   $('export').addEventListener('click', exportExcel);
+
+  // ราคาและต้นทุน: แก้แล้วคำนวณใหม่ทันที เก็บไว้ในเครื่องนี้
+  state.pricing = readPricing();
+  syncPricingForm();
+  $('pricing-form').addEventListener('input', (e) => {
+    const input = e.target.closest('[data-price]');
+    if (!input) return;
+    const n = Number(input.value);
+    if (Number.isFinite(n) && n >= 0) {
+      state.pricing[input.dataset.price] = n;
+      writePricing(state.pricing);
+      render();
+    }
+  });
+  $('pricing-form').addEventListener('submit', (e) => e.preventDefault());
+  $('pricing-reset').addEventListener('click', () => {
+    state.pricing = Object.assign({}, PRICING_DEFAULTS);
+    writePricing(state.pricing);
+    syncPricingForm();
+    render();
+    toast('ใช้ราคาและต้นทุนตามเอกสารแล้ว', 2500);
+  });
+
+  // ตัวเลขตามชีตแบบ "สด": ดึงใหม่ทุก 3 นาทีขณะที่หน้าเปิดอยู่และมองเห็น
+  setInterval(() => {
+    if (document.visibilityState !== 'visible' || !state.data || !state.auth || state.busy) return;
+    if (state.auth.mode === 'demo') return;
+    if (Date.now() - state.loadedAt < REFRESH_EVERY_MS) return;
+    doRefresh({ silent: true });
+  }, 30 * 1000);
 
   // ช่วงวันที่: พับไว้บนมือถือ กางเสมอบนจอกว้าง
   const wide = window.matchMedia('(min-width: 860px)');
