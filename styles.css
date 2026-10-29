@@ -142,7 +142,7 @@ input[type="search"]::-webkit-search-results-button { -webkit-appearance: none; 
 .switch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
 @media (min-width: 720px) { .switch { grid-template-columns: repeat(auto-fill, 220px); } }
 .switch button {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px;
   min-height: 56px; padding: 10px 14px; border-radius: var(--radius); border: 1px solid var(--line);
   background: var(--surface); cursor: pointer; text-align: left;
 }
@@ -156,7 +156,7 @@ input[type="search"]::-webkit-search-results-button { -webkit-appearance: none; 
 .swatch { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--line); flex: none; }
 .swatch.green { background: #1f7a55; border-color: #1f7a55; }
 .swatch.white { background: #ffffff; border-color: #b9c9c0; }
-.switch button .num { font-size: clamp(24px, 2rem, 40px); color: var(--muted); flex: none; }
+.switch button .num { font-size: clamp(24px, 2rem, 40px); color: var(--muted); flex: none; margin-left: auto; }
 .switch button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
 .switch button[aria-pressed="true"] .num { color: var(--accent-text); }
 
@@ -198,7 +198,7 @@ input[type="search"]::-webkit-search-results-button { -webkit-appearance: none; 
 }
 .more[open] > summary::before { transform: rotate(-135deg); margin-top: 4px; }
 .more-title { font-weight: 500; color: var(--ink); }
-.more-state { margin-left: auto; text-align: right; white-space: nowrap; }
+.more-state { margin-left: auto; text-align: right; min-width: 0; max-width: 100%; }
 .more-state.active { color: var(--accent-text); font-weight: 500; }
 .filters { display: grid; gap: 12px; align-items: end; grid-template-columns: 1fr 1fr; padding: 2px 0 4px; }
 .filters > * { min-width: 0; }
@@ -222,7 +222,8 @@ input[type="search"]::-webkit-search-results-button { -webkit-appearance: none; 
 
 .run { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin: 0; }
 .run div { flex: 1 1 72px; padding: 14px 18px 12px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); margin-bottom: -1px; }
-.run div:last-child { border-right: 0; background: var(--accent-soft); }
+.run div:last-child { border-right: 0; }
+.run div.total { background: var(--accent-soft); }
 .run dt { font-size: 0.8125rem; color: var(--muted); font-weight: 500; }
 .run dd { margin: 4px 0 0; font-size: clamp(26px, 2.125rem, 44px); }
 .run div.zero dd { color: var(--muted); }
@@ -286,17 +287,17 @@ td.buyer { min-width: 130px; white-space: pre-line; font-size: 0.875rem; }
 
 /* มือถือ: ทุกหมวดเป็นการ์ดทีละแถว ไม่ต้องเลื่อนตารางไปข้าง */
 @media (max-width: 719px) {
-  table thead { display: none; }
-  table, table tbody, table tr, table td { display: block; width: 100%; }
-  table tr { padding: 12px 16px; border-bottom: 1px solid var(--line); }
-  table tr:last-child { border-bottom: 0; }
-  table td { border: 0; padding: 0; min-width: 0; max-width: none; white-space: normal; }
-  table td.idx { display: none; }
-  table td[data-label]::before {
+  table.cards thead { display: none; }
+  table.cards, table.cards tbody, table.cards tr, table.cards td { display: block; width: 100%; }
+  table.cards tr { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  table.cards tr:last-child { border-bottom: 0; }
+  table.cards td { border: 0; padding: 0; min-width: 0; max-width: none; white-space: normal; }
+  table.cards td.idx { display: none; }
+  table.cards td[data-label]::before {
     content: attr(data-label); display: block; font-size: 0.75rem; font-weight: 500; color: var(--muted);
   }
   .tel, .copy { min-height: 44px; }
-  table td.slip a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; margin: -8px -4px; }
+  table.cards td.slip a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; margin: -8px -4px; }
 
   /* เสื้อ: ไซซ์ | ชื่อเหนือเลขใหญ่ (เหมือนหลังเสื้อ) | ออเดอร์ วันที่ สลิป */
   table.shirt tr {
@@ -336,9 +337,53 @@ td.buyer { min-width: 130px; white-space: pre-line; font-size: 0.875rem; }
 
   /* จัดส่ง */
   table.ship td { padding: 3px 0; }
+  /* กำไร: each ledger line folds to "label / qty × unit" with the total on the right */
+  table.profit thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  table.profit, table.profit tbody { display: block; width: 100%; }
+  table.profit tbody tr {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) max-content; column-gap: 0.35em;
+    align-items: baseline; padding: 10px 16px; border-bottom: 1px solid var(--line);
+  }
+  table.profit tbody tr:last-child { border-bottom: 0; }
+  table.profit tbody tr.section { display: block; padding: 0; }
+  table.profit tbody tr.section th { display: block; padding: 16px 16px 6px; border-bottom: 0; white-space: normal; }
+  table.profit tbody td { border: 0; padding: 0; white-space: normal; }
+  table.profit td.label { grid-column: 1 / 3; grid-row: 1; }
+  table.profit tbody td.qty-col, table.profit tbody td.unit { grid-row: 2; font-size: 0.8125rem; font-weight: 400; color: var(--muted); text-align: left; }
+  table.profit td.qty-col { grid-column: 1; }
+  table.profit td.unit { grid-column: 2 / 4; }
+  table.profit td.unit[data-prefix]::before { content: attr(data-prefix) " "; }
+  table.profit td.qty-col:empty, table.profit td.unit:empty { display: none; }
+  table.profit td.total-col { grid-column: 3; grid-row: 1; align-self: baseline; font-size: 1.0625rem; padding-left: 8px; }
+  table.profit tbody tr.total td { border-top: 0; }
+  table.profit tr.grand { background: var(--accent-soft); }
+  table.profit tr.grand td.total-col { font-size: 1.25rem; }
+  table.profit tbody tr.total td.qty-col, table.profit tbody tr.total td.unit { font-size: 0.8125rem; font-weight: 500; }
   table.ship td.addr, table.ship td.items, table.ship td.buyer { white-space: pre-line; }
   table.ship td.who strong { font-size: 1.0625rem; }
 }
+
+/* กำไร: the ledger */
+table.profit th.amount, table.profit td.amount { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+table.profit td.qty-col { white-space: nowrap; font-variant-numeric: tabular-nums; }
+table.profit tr.section th { padding-top: 14px; font-size: 0.8125rem; font-weight: 600; color: var(--ink); text-transform: none; }
+table.profit tr.total td { font-weight: 600; border-top: 1px solid var(--line); }
+table.profit tr.grand td { font-weight: 700; font-size: 1.0625rem; background: var(--accent-soft); }
+table.profit tr.zero td { color: var(--muted); }
+table.profit td.neg, .run dd.neg { color: var(--danger); }
+.profit-note { margin: 0; padding: 12px 16px; font-size: 0.8125rem; color: var(--muted); border-top: 1px solid var(--line); }
+.pricing { margin-top: 14px; }
+.pricing-form { display: grid; gap: 14px; padding: 4px 0 2px; }
+.pricing-form fieldset { margin: 0; padding: 0; border: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+.pricing-form legend { font-size: 0.875rem; font-weight: 600; margin-bottom: 8px; }
+.pricing-form .field { display: block; margin: 0; }
+.pricing-form .field span { display: block; font-size: 0.8125rem; font-weight: 500; margin-bottom: 4px; }
+.pricing-form input {
+  width: 100%; min-height: 44px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface);
+}
+.pricing-note { margin: 0; font-size: 0.8125rem; color: var(--muted); }
+@media (min-width: 720px) { .pricing-form fieldset { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); } }
+@media (min-width: 860px) { .pricing > summary { display: flex; } }
 
 .empty { padding: 40px 20px; text-align: center; color: var(--muted); }
 .empty .btn { margin-top: 12px; }

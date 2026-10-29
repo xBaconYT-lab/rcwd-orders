@@ -119,6 +119,36 @@
     </div>
   </section>
 
+  <details class="more pricing" id="pricing" hidden>
+    <summary>
+      <span class="more-title">ราคาและต้นทุนที่ใช้คำนวณ</span>
+      <span class="more-state" id="pricing-state">ตามบันทึกข้อความ ต.ค. 2569</span>
+    </summary>
+    <form class="pricing-form" id="pricing-form">
+      <fieldset>
+        <legend>ราคาขาย (บาท)</legend>
+        <label class="field"><span>เสื้อ 1 ตัว</span><input type="number" inputmode="decimal" min="0" step="1" data-price="shirtPrice"></label>
+        <label class="field"><span>หมวก 1 ใบ</span><input type="number" inputmode="decimal" min="0" step="1" data-price="capPrice"></label>
+        <label class="field"><span>เสื้อ 2 สี (ชุด)</span><input type="number" inputmode="decimal" min="0" step="1" data-price="pairPrice"></label>
+        <label class="field"><span>เสื้อ + หมวก (ชุด)</span><input type="number" inputmode="decimal" min="0" step="1" data-price="shirtCapPrice"></label>
+        <label class="field"><span>ครบเซ็ต เสื้อ 2 สี + หมวก</span><input type="number" inputmode="decimal" min="0" step="1" data-price="fullSetPrice"></label>
+      </fieldset>
+      <fieldset>
+        <legend>ต้นทุนต่อหน่วย (บาท)</legend>
+        <label class="field"><span>เสื้อ</span><input type="number" inputmode="decimal" min="0" step="1" data-price="shirtCost"></label>
+        <label class="field"><span>เสื้อไซซ์ 3XL</span><input type="number" inputmode="decimal" min="0" step="1" data-price="shirt3xlCost"></label>
+        <label class="field"><span>หมวก</span><input type="number" inputmode="decimal" min="0" step="1" data-price="capCost"></label>
+      </fieldset>
+      <fieldset>
+        <legend>ค่าใช้จ่ายเพิ่ม (บาท)</legend>
+        <label class="field"><span>ค่าส่งพัสดุ ต่อออเดอร์ที่จัดส่ง</span><input type="number" inputmode="decimal" min="0" step="1" data-price="shipCostPerOrder"></label>
+        <label class="field"><span>ค่าใช้จ่ายอื่น ๆ รวม</span><input type="number" inputmode="decimal" min="0" step="1" data-price="otherCost"></label>
+      </fieldset>
+      <p class="pricing-note">ตัวเลขเก็บในเบราว์เซอร์เครื่องนี้เท่านั้น ไม่แก้ข้อมูลในชีต</p>
+      <button class="btn" type="button" id="pricing-reset">ใช้ค่าตามเอกสาร</button>
+    </form>
+  </details>
+
   <footer class="foot">
     <span id="updated"></span>
     <span class="foot-right">
