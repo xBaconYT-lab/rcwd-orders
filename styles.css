@@ -211,6 +211,37 @@ input[type="search"]::-webkit-search-results-button { -webkit-appearance: none; 
 .filters .actions { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; }
 /* long labels ("ดาวน์โหลด Excel (12 ออเดอร์)") may wrap at large text sizes instead of pushing past the screen */
 .filters .actions .btn { white-space: normal; max-width: 100%; text-align: center; }
+/* เลือกคอลัมน์ที่จะลงไฟล์ Excel */
+.columns { grid-column: 1 / -1; }
+.columns > summary {
+  list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px;
+  min-height: 44px; padding: 0 4px; cursor: pointer; color: var(--muted); font-size: 0.875rem;
+}
+.columns > summary::-webkit-details-marker { display: none; }
+.columns > summary::before {
+  content: ''; flex: none; width: 8px; height: 8px; margin: -4px 4px 0 2px;
+  border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg);
+}
+.columns[open] > summary::before { transform: rotate(-135deg); margin-top: 4px; }
+.columns-list { display: flex; flex-wrap: wrap; gap: 4px 6px; padding: 2px 0 6px; }
+.col-opt {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px 0 8px;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: 0.9375rem; cursor: pointer;
+}
+.col-opt input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+.col-opt.summary-opt { border-style: dashed; }
+/* แก้ไขชื่อ/เลขหลังเสื้อในแถว */
+.btn.small { min-height: 36px; padding: 6px 14px; font-size: 0.875rem; }
+td.edit { white-space: nowrap; text-align: right; }
+td.edit .btn + .btn { margin-left: 6px; }
+tr.editing { background: var(--accent-soft); }
+.edit-field { display: block; }
+.edit-field span { display: block; font-size: 0.75rem; font-weight: 500; color: var(--muted); margin-bottom: 4px; }
+.edit-field input {
+  width: 100%; max-width: 220px; min-height: 44px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface); font-weight: 600;
+}
+#edit-number { max-width: 120px; font-size: 1.25rem; letter-spacing: 0.04em; }
 @media (min-width: 860px) {
   .more > summary { display: none; }
   .filters { grid-template-columns: 170px 170px auto; padding: 0; }
@@ -302,9 +333,12 @@ td.buyer { min-width: 130px; white-space: pre-line; font-size: 0.875rem; }
   /* เสื้อ: ไซซ์ | ชื่อเหนือเลขใหญ่ (เหมือนหลังเสื้อ) | ออเดอร์ วันที่ สลิป */
   table.shirt tr {
     display: grid; grid-template-columns: auto 1fr auto;
-    grid-template-areas: "size name order" "size number when" "size number slip";
+    grid-template-areas: "size name order" "size number when" "size number slip" "size edit edit";
     column-gap: 14px; row-gap: 0; align-items: start;
   }
+  table.shirt td.edit { grid-area: edit; padding-top: 10px; }
+  table.shirt td.edit:empty { display: none; }
+  table.shirt tr.editing td.back-name, table.shirt tr.editing td.back-number { padding-top: 6px; }
   table.shirt td.size { grid-area: size; padding-top: 4px; }
   table.shirt td.back-name { grid-area: name; font-size: 1.0625rem; line-height: 1.3; }
   table.shirt td.back-number { grid-area: number; }

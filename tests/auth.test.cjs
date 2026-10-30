@@ -105,6 +105,15 @@ test('refresh accepts the token and rejects tampered or foreign ones', () => {
   assert.equal(post({ token: 'x'.repeat(600) }).code, 'session');
 });
 
+test('update passes the body through with the signed-in user, only for a live token', () => {
+  const r = post({ action: 'update', token, kind: 'shirt', order: '#9-1', name: 'FLAG', number: '63' });
+  assert.equal(r.ok, true);
+  assert.equal(r.action, 'update');
+  assert.equal(r.username, 'staff');
+  assert.equal(r.body.order, '#9-1');
+  assert.equal(post({ action: 'update', token: 'v1.a.b.c', kind: 'shirt' }).code, 'session');
+});
+
 test('logout revokes the token for good', () => {
   assert.equal(post({ action: 'logout', token }).ok, true);
   assert.equal(post({ action: 'refresh', token }).code, 'session');

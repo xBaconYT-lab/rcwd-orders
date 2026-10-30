@@ -16,6 +16,7 @@
  *   { action: "login",   username, password } -> { ok, token, expiresAt, ...ข้อมูล }
  *   { action: "refresh", token }              -> { ok, token, expiresAt, ...ข้อมูล }
  *   { action: "logout",  token }              -> { ok: true }
+ *   { action: "update",  token, ... }         -> ผ่านต่อให้ Update.gs (คืน { ok, updated })
  *   { username, password } (หน้าเว็บเวอร์ชันเก่า) ทำงานเหมือน login
  * ตอบ { ok: false, error: ข้อความภาษาไทย, code } เมื่อไม่ผ่าน
  *
@@ -206,6 +207,10 @@ var Auth = (function () {
     }
     if (action === 'refresh') {
       return { ok: true, action: 'refresh', username: session.username, token: body.token, expiresAt: new Date(session.exp).toISOString() };
+    }
+    if (action === 'update') {
+      // แก้ไขข้อมูล: doPost ส่ง body ต่อให้ RCWD_UPDATE.handle (Update.gs) หลังผ่านการยืนยันตัวตนแล้ว
+      return { ok: true, action: 'update', username: session.username, token: body.token, expiresAt: new Date(session.exp).toISOString(), body: body };
     }
     return fail('bad_request');
   }

@@ -22,6 +22,7 @@
   const SESSION_KEY = 'rcwd-session';
   const UI_KEY = 'rcwd-ui';            // the last category opened (no personal data), so the app reopens where it was
   const PRICING_KEY = 'rcwd-pricing';  // prices and costs used by the profit view (no personal data)
+  const EXPORT_KEY = 'rcwd-export';    // which columns to leave out of the Excel file, per category (no personal data)
   const REFRESH_EVERY_MS = 3 * 60 * 1000; // while the page is open and visible, the numbers follow the sheet
   // ราคาและต้นทุนตาม "บันทึกข้อความ การจัดทำและจัดจำหน่ายของที่ระลึก คณะราชาวดี 2569" (เอกสารแนบ ข้อ 1-2)
   const PRICING_DEFAULTS = {
@@ -34,7 +35,7 @@
   const FETCH_TIMEOUT_MS = 25000;
   const STANDALONE = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
 
-  const state = { data: null, auth: null, view: '', from: '', to: '', q: '', loadedAt: 0, busy: false, withOrder: false, withQty: false, pricing: null };
+  const state = { data: null, auth: null, view: '', from: '', to: '', q: '', loadedAt: 0, busy: false, withOrder: false, withQty: false, pricing: null, editing: null, exportPrefs: {} };
   const $ = (id) => document.getElementById(id);
 
   // ---------- helpers ----------
@@ -128,6 +129,23 @@
   function writePricing(v) {
     try { localStorage.setItem(PRICING_KEY, JSON.stringify(v)); } catch (e) { /* ignore */ }
   }
+  // { shirt: { off: ['ลิงก์สลิป'], summary: false }, cap: {...}, ship: {...} }
+  function readExportPrefs() {
+    try {
+      const v = JSON.parse(localStorage.getItem(EXPORT_KEY) || 'null');
+      if (!v || typeof v !== 'object') return {};
+      const out = {};
+      for (const kind of ['shirt', 'cap', 'ship']) {
+        const p = v[kind];
+        if (p && typeof p === 'object') out[kind] = { off: Array.isArray(p.off) ? p.off.map(text).slice(0, 40) : [], summary: p.summary !== false };
+      }
+      return out;
+    } catch (e) { return {}; }
+  }
+  function writeExportPrefs(v) {
+    try { localStorage.setItem(EXPORT_KEY, JSON.stringify(v)); } catch (e) { /* ignore */ }
+  }
+  const exportPref = (kind) => state.exportPrefs[kind] || { off: [], summary: true };
   function forgetLegacy() {
     try { for (const k of LEGACY_KEYS) { sessionStorage.removeItem(k); localStorage.removeItem(k); } } catch (e) { /* ignore */ }
   }
@@ -401,7 +419,7 @@
     const main = kind === 'shirt'
       ? ['ลำดับ', 'Size', 'ชื่อหลังเสื้อ', 'เลขหลังเสื้อ']
       : ['ลำดับ', 'ชื่อ', 'ชั้น', 'ห้อง', 'เบอร์ติดต่อ', 'IG / Line', 'สินค้าที่สั่ง'].concat(state.withQty ? ['จำนวน'] : []);
-    return main.concat(order, ['วันที่สั่ง', 'สลิป']);
+    return main.concat(order, ['วันที่สั่ง', 'สลิป'], kind === 'shirt' && canEdit() ? [''] : []);
   }
 
   // แถวที่ไม่มีเลขออเดอร์ = พิมพ์เพิ่มเองในชีต
@@ -420,24 +438,97 @@
     ]);
   }
 
+  // แก้ชื่อ/เลขหลังเสื้อได้เมื่อแถวมีเลขออเดอร์ (สคริปต์ต้องมี Update.gs ด้วย จึงจะบันทึกลงชีตได้)
+  const canEdit = () => state.withOrder && !!state.auth;
+  const editKey = (row) => text(row.order);
   function shirtRow(row, i) {
     const nameBad = badName(row.name);
     const numberBad = badNumber(row.number);
-    return el('tr', null, [
+    const editing = canEdit() && !!editKey(row) && state.editing === editKey(row);
+    const editCell = !canEdit() ? null : el('td', { class: 'edit' }, editing ? [
+      el('button', { class: 'btn primary small', type: 'submit', form: 'edit-form', id: 'edit-save', text: 'บันทึก' }),
+      el('button', { class: 'btn small', type: 'button', id: 'edit-cancel', text: 'ยกเลิก' }),
+    ] : [
+      editKey(row)
+        ? el('button', { class: 'btn small', type: 'button', 'data-edit': editKey(row), 'aria-label': 'แก้ไขชื่อและเลขหลังเสื้อ ' + editKey(row), text: 'แก้ไข' })
+        : null,
+    ]);
+    return el('tr', { class: editing ? 'editing' : null }, [
       el('td', { class: 'idx', text: String(i + 1) }),
       el('td', { class: 'size' }, [el('span', { text: text(row.size) || '-' })]),
-      el('td', { class: 'back-name' + (nameBad ? ' flag' : '') }, [
-        text(row.name) || '-',
-        nameBad ? el('span', { class: 'hint', text: 'เกิน 8 ตัวอักษร' }) : null,
-      ]),
-      el('td', { class: 'back-number' + (numberBad ? ' flag' : '') }, [
-        el('span', { class: 'num', text: text(row.number) || '-' }),
-        numberBad ? el('span', { class: 'hint', text: 'ต้องเป็นตัวเลข 1-3 หลัก' }) : null,
-      ]),
+      editing
+        ? el('td', { class: 'back-name' }, [el('label', { class: 'edit-field' }, [
+            el('span', { text: 'ชื่อหลังเสื้อ' }),
+            el('input', { type: 'text', id: 'edit-name', form: 'edit-form', value: text(row.name), maxlength: '20', autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false', required: '' }),
+          ])])
+        : el('td', { class: 'back-name' + (nameBad ? ' flag' : '') }, [
+            text(row.name) || '-',
+            nameBad ? el('span', { class: 'hint', text: 'เกิน 8 ตัวอักษร' }) : null,
+          ]),
+      editing
+        ? el('td', { class: 'back-number' }, [el('label', { class: 'edit-field' }, [
+            el('span', { text: 'เลขหลังเสื้อ' }),
+            el('input', { type: 'text', id: 'edit-number', form: 'edit-form', value: text(row.number), inputmode: 'numeric', pattern: '[0-9]{1,3}', maxlength: '3', autocomplete: 'off', required: '', title: 'ตัวเลข 1-3 หลัก' }),
+          ])])
+        : el('td', { class: 'back-number' + (numberBad ? ' flag' : '') }, [
+            el('span', { class: 'num', text: text(row.number) || '-' }),
+            numberBad ? el('span', { class: 'hint', text: 'ต้องเป็นตัวเลข 1-3 หลัก' }) : null,
+          ]),
       orderCell(row),
       el('td', { class: 'when', text: shortDate(row.time) }),
       slipCell(row),
+      editCell,
     ]);
+  }
+
+  // ---------- แก้ไขลงชีต ----------
+  // ส่ง { action: 'update', kind: 'shirt', order, color, name, number } พร้อมโทเค็น (หรือชื่อผู้ใช้/รหัสผ่านกับสคริปต์รุ่นเก่า)
+  // สคริปต์ฝั่งชีต (apps-script/Update.gs) แก้เฉพาะสองเซลล์นั้นและจดค่าเดิมไว้ในแท็บ log ไม่ลบอะไร
+  function authBody(body) {
+    const a = state.auth;
+    if (a && a.mode === 'token') return Object.assign({ token: a.token }, body);
+    if (a && a.mode === 'password') return Object.assign({ username: a.username, password: a.password }, body);
+    return body;
+  }
+  function findShirt(key) {
+    return state.data ? state.data.shirts.find((r) => editKey(r) === key) : null;
+  }
+  async function saveEdit() {
+    const key = state.editing;
+    const row = findShirt(key);
+    const nameInput = $('edit-name');
+    const numberInput = $('edit-number');
+    if (!row || !nameInput || !numberInput) return;
+    const name = nameInput.value.replace(/\s+/g, ' ').trim();
+    const number = numberInput.value.trim();
+    if (!name) { toast('ใส่ชื่อหลังเสื้อ'); nameInput.focus(); return; }
+    if (name.length > 20) { toast('ชื่อหลังเสื้อยาวเกิน 20 ตัวอักษร'); nameInput.focus(); return; }
+    if (!/^\d{1,3}$/.test(number)) { toast('เลขหลังเสื้อต้องเป็นตัวเลข 1-3 หลัก'); numberInput.focus(); return; }
+    if (name === text(row.name) && number === text(row.number)) { state.editing = null; render(); return; }
+    if (state.busy) return;
+    state.busy = true;
+    const save = $('edit-save');
+    if (save) { save.disabled = true; save.textContent = 'กำลังบันทึก…'; }
+    try {
+      if (state.auth.mode === 'demo') {
+        row.name = name; row.number = number;
+        toast('แก้ไขแล้ว (ตัวอย่าง: ไม่ได้บันทึกจริง)', 2500);
+      } else {
+        const json = await callApi(authBody({ action: 'update', kind: 'shirt', order: key, color: text(row.color), name, number }));
+        if (!json.updated) throw new Error('สคริปต์ของชีตยังไม่รองรับการแก้ไข: เพิ่ม Update.gs ตามขั้นตอนใน README ก่อน');
+        row.name = name; row.number = number;
+        toast('บันทึกลงชีตแล้ว', 2500);
+      }
+      state.editing = null;
+      state.busy = false;
+      render();
+      if (state.auth.mode !== 'demo') await doRefresh({ silent: true });
+    } catch (err) {
+      state.busy = false;
+      if (save) { save.disabled = false; save.textContent = 'บันทึก'; }
+      if (err.auth && err.code === 'session') showLogin(err.message);
+      else toast(err.message || 'บันทึกไม่สำเร็จ');
+    }
   }
 
   // เบอร์โทรกดโทรได้บนมือถือ
@@ -565,6 +656,7 @@
       el('span', { class: 'num', text: v.kind === 'profit' ? baht(countOf(v, rowsOf(v, true))) : String(countOf(v, rowsOf(v, true))) }),
     ])));
     const isProfit = view.kind === 'profit';
+    if (state.editing && (view.kind !== 'shirt' || !findShirt(state.editing))) state.editing = null;
     $('searchbar').hidden = isProfit;
     $('q').placeholder = (view.kind === 'shirt' ? 'ชื่อหลังเสื้อ หรือเลข'
       : view.kind === 'ship' ? 'ชื่อ เบอร์ ที่อยู่ หรือเลขพัสดุ'
@@ -588,6 +680,7 @@
       ? 'ดาวน์โหลด Excel (สรุปกำไร)'
       : 'ดาวน์โหลด Excel (' + countOf(view, shown) + ' ' + UNIT[view.kind] + (state.q ? ' ที่ค้นพบ' : '') + ')';
     exportBtn.disabled = shown.length === 0;
+    renderColumnPicker(view);
 
     $('thead').closest('table').className = isProfit ? 'profit' : view.kind + ' cards';
     if (isProfit) {
@@ -641,16 +734,51 @@
       if (!window.XlsxLite) throw new Error('โหลดตัวสร้างไฟล์ Excel ไม่ได้ รีเฟรชหน้าแล้วลองใหม่');
       const view = currentView();
       const rows = rowsOf(view, true).filter(matches);
-      const when = (r) => { const t = toDate(r.time); return t ? fullFmt.format(t).replace(',', '') : ''; };
-      let header, body, widths;
+      let { header, body, widths } = buildExport(view, rows);
       const sheetName = view.label.slice(0, 31);
-      const withOrder = state.withOrder;
-      const order = (r) => (withOrder ? [text(r.order) || 'เพิ่มเอง'] : []);
-      const orderHead = withOrder ? ['ออเดอร์'] : [];
-      const orderWidth = withOrder ? [10] : [];
-      // ช่องที่มีหลายบรรทัด (รายการ ผู้สั่ง) ต่อกันด้วย " / " จะได้อ่านง่ายใน Excel
-      const oneLine = (v) => text(v).split('\n').map((x) => x.trim()).filter(Boolean).join(' / ');
-      const qtyHead = state.withQty ? ['จำนวน (ใบ)'] : [];
+      // columns the user unticked in "เลือกคอลัมน์"
+      const pref = exportPref(view.kind);
+      if (view.kind !== 'profit' && pref.off.length) {
+        const keep = header.map((h) => !pref.off.includes(h));
+        if (!keep.some(Boolean)) throw new Error('เลือกคอลัมน์อย่างน้อย 1 คอลัมน์ก่อนดาวน์โหลด');
+        header = header.filter((h, i) => keep[i]);
+        widths = widths.filter((w, i) => keep[i]);
+        body = body.map((r) => r.filter((c, i) => keep[i]));
+      }
+      let sheets;
+      if (view.kind === 'profit') {
+        sheets = profitSheets();
+      } else {
+        const s = summary(rows, view);
+        const sumHead = [view.kind === 'shirt' ? 'Size' : view.kind === 'ship' ? 'สถานะ' : 'รายการ', 'จำนวน'];
+        sheets = [{ name: sheetName, rows: [header].concat(body), widths }];
+        if (pref.summary) sheets.push({ name: 'สรุป', rows: [sumHead].concat(s.items, [s.total]), widths: [16, 10] });
+      }
+      const blob = window.XlsxLite.build({ sheets });
+      const range = state.from || state.to ? (state.from || 'เริ่ม') + '_ถึง_' + (state.to || 'ล่าสุด') : 'ทั้งหมด';
+      const found = state.q ? '-ค้นหา' : '';
+      saveFile(blob, 'RCWD-' + sheetName + '-' + range + found + '.xlsx');
+    } catch (e) {
+      toast(e.message || 'สร้างไฟล์ไม่สำเร็จ');
+    } finally {
+      btn.textContent = label;
+      btn.disabled = false;
+      render();
+    }
+  }
+
+  // หัวคอลัมน์ + แถวข้อมูล + ความกว้าง ของไฟล์ Excel ในหมวดนั้น (ใช้ทั้งตอนดาวน์โหลดและตอนให้เลือกคอลัมน์)
+  function buildExport(view, rows) {
+    const when = (r) => { const t = toDate(r.time); return t ? fullFmt.format(t).replace(',', '') : ''; };
+    let header, body, widths;
+    const withOrder = state.withOrder;
+    const order = (r) => (withOrder ? [text(r.order) || 'เพิ่มเอง'] : []);
+    const orderHead = withOrder ? ['ออเดอร์'] : [];
+    const orderWidth = withOrder ? [10] : [];
+    // ช่องที่มีหลายบรรทัด (รายการ ผู้สั่ง) ต่อกันด้วย " / " จะได้อ่านง่ายใน Excel
+    const oneLine = (v) => text(v).split('\n').map((x) => x.trim()).filter(Boolean).join(' / ');
+    const qtyHead = state.withQty ? ['จำนวน (ใบ)'] : [];
+    {
       if (view.kind === 'profit') {
         header = []; body = []; widths = [];
       } else if (view.kind === 'shirt') {
@@ -668,8 +796,11 @@
           .concat(state.withQty ? [qtyOf(r)] : [], order(r), [when(r), safeLink(r.slip)]));
         widths = [7, 26, 10, 6, 14, 20, 26].concat(state.withQty ? [10] : [], orderWidth, [18, 45]);
       }
-      let sheets;
-      if (view.kind === 'profit') {
+    }
+    return { header, body, widths };
+  }
+
+  function profitSheets() {
         const P = state.pricing;
         const r = computeProfit();
         const b = r.bundles;
@@ -693,26 +824,27 @@
           ['รวมต้นทุน', '', '', r.totalCost],
           ['กำไร', r.orders + ' ออเดอร์', pct(r.margin), r.profit],
         ].filter(Boolean);
-        sheets = [{ name: 'กำไร', rows: ledger, widths: [34, 12, 16, 14] }];
-      } else {
-        const s = summary(rows, view);
-        const sumHead = [view.kind === 'shirt' ? 'Size' : view.kind === 'ship' ? 'สถานะ' : 'รายการ', 'จำนวน'];
-        sheets = [
-          { name: sheetName, rows: [header].concat(body), widths },
-          { name: 'สรุป', rows: [sumHead].concat(s.items, [s.total]), widths: [16, 10] },
-        ];
-      }
-      const blob = window.XlsxLite.build({ sheets });
-      const range = state.from || state.to ? (state.from || 'เริ่ม') + '_ถึง_' + (state.to || 'ล่าสุด') : 'ทั้งหมด';
-      const found = state.q ? '-ค้นหา' : '';
-      saveFile(blob, 'RCWD-' + sheetName + '-' + range + found + '.xlsx');
-    } catch (e) {
-      toast(e.message || 'สร้างไฟล์ไม่สำเร็จ');
-    } finally {
-      btn.textContent = label;
-      btn.disabled = false;
-      render();
-    }
+        return [{ name: 'กำไร', rows: ledger, widths: [34, 12, 16, 14] }];
+  }
+
+  // เลือกคอลัมน์ที่จะลงในไฟล์ Excel (จำไว้ต่อหมวดในเครื่องนี้)
+  function renderColumnPicker(view) {
+    const box = $('columns');
+    if (view.kind === 'profit') { box.hidden = true; return; }
+    box.hidden = false;
+    const { header } = buildExport(view, []);
+    const pref = exportPref(view.kind);
+    const items = header.map((h) => el('label', { class: 'col-opt' }, [
+      el('input', { type: 'checkbox', 'data-col': h, checked: pref.off.includes(h) ? null : '' }),
+      el('span', { text: h }),
+    ]));
+    items.push(el('label', { class: 'col-opt summary-opt' }, [
+      el('input', { type: 'checkbox', 'data-summary': '', checked: pref.summary ? '' : null }),
+      el('span', { text: 'แผ่น "สรุป" (ยอดรวม)' }),
+    ]));
+    $('columns-list').replaceChildren(...items);
+    const n = header.length - pref.off.length;
+    $('columns-state').textContent = pref.off.length ? n + ' จาก ' + header.length + ' คอลัมน์' : 'ทุกคอลัมน์';
   }
 
   // ---------- auth ----------
@@ -868,6 +1000,42 @@
   $('clear-dates').addEventListener('click', clearDates);
   $('empty-reset').addEventListener('click', clearDates);
   $('export').addEventListener('click', exportExcel);
+
+  // แก้ไขชื่อ/เลขหลังเสื้อ
+  $('tbody').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-edit]');
+    if (btn) {
+      if (state.busy) return;
+      state.editing = btn.dataset.edit;
+      render();
+      const input = $('edit-name');
+      if (input) { input.focus(); input.select(); }
+      return;
+    }
+    if (e.target.closest('#edit-cancel')) { state.editing = null; render(); }
+  });
+  $('edit-form').addEventListener('submit', (e) => { e.preventDefault(); saveEdit(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && state.editing) { state.editing = null; render(); }
+  });
+
+  // คอลัมน์ในไฟล์ Excel
+  state.exportPrefs = readExportPrefs();
+  $('columns-list').addEventListener('change', (e) => {
+    const view = currentView();
+    if (!view || view.kind === 'profit') return;
+    const pref = exportPref(view.kind);
+    const input = e.target;
+    if (input.matches('[data-summary]')) pref.summary = input.checked;
+    else if (input.matches('[data-col]')) {
+      const col = input.dataset.col;
+      pref.off = pref.off.filter((c) => c !== col);
+      if (!input.checked) pref.off.push(col);
+    }
+    state.exportPrefs[view.kind] = pref;
+    writeExportPrefs(state.exportPrefs);
+    renderColumnPicker(view);
+  });
 
   // ราคาและต้นทุน: แก้แล้วคำนวณใหม่ทันที เก็บไว้ในเครื่องนี้
   state.pricing = readPricing();
