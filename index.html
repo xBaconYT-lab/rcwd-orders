@@ -102,8 +102,16 @@
         <button class="btn" type="button" id="clear-dates" hidden>ล้างวันที่</button>
         <button class="btn primary" type="button" id="export">ดาวน์โหลด Excel</button>
       </div>
+      <details class="columns" id="columns">
+        <summary>
+          <span class="more-title">เลือกคอลัมน์ในไฟล์ Excel</span>
+          <span class="more-state" id="columns-state">ทุกคอลัมน์</span>
+        </summary>
+        <div class="columns-list" id="columns-list"></div>
+      </details>
     </div>
   </details>
+  <form id="edit-form" hidden></form>
 
   <section class="panel" aria-labelledby="app-title">
     <dl class="run" id="run"></dl>

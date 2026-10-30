@@ -2,7 +2,7 @@
  * Code.gs.sample — ตัวอย่าง doPost ที่ใช้ Auth.gs (ไม่ใช่โค้ดอ่านชีต: ส่วนนั้นเป็นของคุณอยู่แล้ว)
  *
  * วิธีแก้สคริปต์เดิม:
- *  1. เพิ่มไฟล์ Auth.gs (คัดลอกทั้งไฟล์)
+ *  1. เพิ่มไฟล์ Auth.gs และ Update.gs (คัดลอกทั้งไฟล์)
  *  2. ใน doPost เดิม แทนที่ส่วนที่เช็กชื่อผู้ใช้/รหัสผ่านด้วย 3 บรรทัดแรกด้านล่าง
  *     และส่ง token/expiresAt กลับไปพร้อมข้อมูล
  *  3. ลบรหัสผ่านที่เคยเขียนไว้ในโค้ด แล้วรัน SETUP_setPassword ใน Auth.gs หนึ่งครั้ง
@@ -16,6 +16,7 @@ function doPost(e) {
   var auth = Auth.handle(e);
   if (!auth.ok) return Auth.json(auth);
   if (auth.action === 'logout') return Auth.json({ ok: true });
+  if (auth.action === 'update') return Auth.json(RCWD_UPDATE.handle(auth.body, auth.username)); // Update.gs: แก้ชื่อ/เลขหลังเสื้อ
 
   var data = buildData(); // โค้ดเดิมของคุณที่อ่านแท็บ Jersey เขียว / Jersey ขาว / หมวก RCWD / จัดส่ง
 
