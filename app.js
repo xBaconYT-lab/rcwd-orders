@@ -20,7 +20,8 @@
   const API_URL = String(window.RCWD_API_URL || '').trim();
   const DEMO = new URLSearchParams(location.search).has('demo');
   const SESSION_KEY = 'rcwd-session';
-  const UI_KEY = 'rcwd-ui';            // the last category opened (no personal data), so the app reopens where it was
+  const CHECKLIST = document.body.dataset.page === 'checklist'; // checklist.html: the same app, a different screen
+  const UI_KEY = CHECKLIST ? 'rcwd-ui-checklist' : 'rcwd-ui'; // the last category opened (no personal data), so the app reopens where it was
   const PRICING_KEY = 'rcwd-pricing';  // prices and costs used by the profit view (no personal data)
   const EXPORT_KEY = 'rcwd-export';    // which columns to leave out of the Excel file, per category (no personal data)
   const REFRESH_EVERY_MS = 3 * 60 * 1000; // while the page is open and visible, the numbers follow the sheet
@@ -35,8 +36,9 @@
   const FETCH_TIMEOUT_MS = 25000;
   const STANDALONE = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
 
-  const state = { data: null, auth: null, view: '', from: '', to: '', q: '', loadedAt: 0, busy: false, withOrder: false, withQty: false, pricing: null, editing: null, exportPrefs: {} };
+  const state = { data: null, auth: null, view: '', from: '', to: '', q: '', loadedAt: 0, busy: false, withOrder: false, withQty: false, pricing: null, editing: null, exportPrefs: {}, hideGiven: false, withGiven: false };
   const $ = (id) => document.getElementById(id);
+  const on = (id, ev, fn) => { const n = $(id); if (n) n.addEventListener(ev, fn); }; // checklist.html has fewer controls
 
   // ---------- helpers ----------
   const tz = 'Asia/Bangkok';
@@ -108,7 +110,11 @@
     } catch (e) { /* private mode: nothing is kept */ }
   }
   function readUi() {
-    try { const v = JSON.parse(localStorage.getItem(UI_KEY) || 'null'); return v && typeof v.view === 'string' ? v : null; } catch (e) { return null; }
+    try {
+      const v = JSON.parse(localStorage.getItem(UI_KEY) || 'null');
+      if (!v || typeof v.view !== 'string') return null;
+      return { view: v.view, hideGiven: v.hideGiven === true };
+    } catch (e) { return null; }
   }
   function writeUi(v) {
     try { localStorage.setItem(UI_KEY, JSON.stringify(v)); } catch (e) { /* ignore */ }
@@ -199,9 +205,15 @@
     const day = (d) => new Date(Date.UTC(2026, 9, d, 4 + (d % 5), 10 + d)).toISOString();
     // ออเดอร์ #9 มีเสื้อ 2 สี + หมวก (ครบเซ็ต), #2 มีเสื้อ + หมวก, #21 หมวก 3 ใบ: ตรงกับรายการจัดส่งตัวอย่างด้านล่าง
     const orders = ['#1-1', '#2-1', '#3-1', '#4-1', '#5-1', '#6-1', '#7-1', '#8-1', '#12-1', '#9-1', '#9-2', '#13-1', '#14-1', '#15-1'];
+    // ผู้สั่งกับชั้น/ห้อง (จากแท็บตรวจสลิป) มาหลายแบบ: "ม.1" + "2", "1/5" ในช่องชั้น, เลขไทย, ไม่กรอก
+    const buyers = [['นักเรียน ก', 'ม.1', '2'], ['นักเรียน ข', '5/2', ''], ['นักเรียน ค', 'ม.1', '5'], ['นักเรียน ง', 'ม.6', '7'],
+      ['นักเรียน จ', '2', '5'], ['นักเรียน ฉ', 'ม.๑', '๒'], ['นักเรียน ช', '', ''], ['นักเรียน ซ', 'ม.5', '2'],
+      ['นักเรียน ฌ', 'ม.2', '5'], ['นักเรียน ญ', 'ม.1', '5'], ['นักเรียน ญ', 'ม.1', '5'], ['นักเรียน ฎ', 'ม.6', '7'],
+      ['นักเรียน ฏ', 'ม.1', '2'], ['นักเรียน ฐ', 'ม.2', '5']];
     const shirts = names.map((n, i) => ({
       order: orders[i], time: day(3 + (i % 5)), color: i % 3 === 0 ? 'ขาว' : 'เขียว', size: sizes[i], name: n,
-      number: i === 5 ? '1234' : String((i * 7) % 99).padStart(i % 4 === 0 ? 2 : 1, '0'), piece: 1, slip: '',
+      buyer: buyers[i][0], grade: buyers[i][1], room: buyers[i][2],
+      number: i === 5 ? '1234' : String((i * 7) % 99).padStart(i % 4 === 0 ? 2 : 1, '0'), piece: 1, slip: '', given: i % 4 === 1,
     }));
     shirts.push({ order: '', time: '', color: 'เขียว', size: 'M', name: 'STAFF', number: '0', slip: '' });
     const capOrders = [
@@ -211,9 +223,11 @@
       { order: '#23', product: 'หมวก RCWD', qty: 2 },
       { order: '#24', product: 'RCWD Jersey + หมวก RCWD', qty: 1 },
     ];
+    // ชั้น/ห้อง หลายแบบที่คนกรอกจริง: "ม.5" + "2", "1/2" ในช่องชั้น, เลขไทย — เรียงแล้วต้องได้ 1/2, 1/5, 2/5, 5/2, 6/7
+    const capGrades = [['ม.5', '2'], ['1/2', ''], ['ม.๖', '7'], ['ม.2', '5'], ['1', '5']];
     const caps = ['ตัวอย่าง หนึ่ง', 'ตัวอย่าง สอง', 'ตัวอย่าง สาม', 'ตัวอย่าง สี่', 'ตัวอย่าง ห้า'].map((n, i) => ({
-      order: capOrders[i].order, time: day(4 + (i % 4)), name: n, grade: 'ม.' + (i + 1), room: String(i + 2), phone: '0800000' + String(100 + i),
-      social: '@demo' + (i + 1), product: capOrders[i].product, qty: capOrders[i].qty, slip: '',
+      order: capOrders[i].order, time: day(4 + (i % 4)), name: n, grade: capGrades[i][0], room: capGrades[i][1], phone: '0800000' + String(100 + i),
+      social: '@demo' + (i + 1), product: capOrders[i].product, qty: capOrders[i].qty, slip: '', given: i === 1 || i === 3,
     }));
     const shipping = [
       { order: '#2', time: day(3), name: 'ผู้รับ ตัวอย่าง', phone: '0811111111', address: '99/1 ถ.ตัวอย่าง แขวงสามเสนใน เขตพญาไท กรุงเทพฯ 10400',
@@ -248,7 +262,7 @@
     return views;
   }
   function currentView() {
-    const views = viewList(state.data);
+    const views = CHECKLIST ? CHECKLIST_VIEWS : viewList(state.data);
     return views.find((v) => v.key === state.view) || views[0];
   }
   function rowsOf(view, onlyInRange) {
@@ -258,6 +272,21 @@
       : state.data.shirts.filter((r) => view.color === null || text(r.color) === view.color);
     return onlyInRange ? base.filter(inRange) : base;
   }
+
+  // ---------- เรียงลำดับ ----------
+  // ชั้น/ห้อง: อ่านตัวเลขจากช่องชั้น ("ม.4", "ม.๔", "4", หรือ "4/2" ที่กรอกรวมมา) และช่องห้อง แล้วเรียงเป็นตัวเลข
+  // จึงได้ 1/2, 1/5, 2/5, 5/2, 6/7 (ไม่ใช่เรียงตามตัวอักษร) ชั้นที่อ่านไม่ออกไปท้ายสุด
+  const arabic = (v) => text(v).replace(/[๐-๙]/g, (d) => String('๐๑๒๓๔๕๖๗๘๙'.indexOf(d)));
+  const numbersIn = (v) => (arabic(v).match(/\d+/g) || []).map(Number);
+  function classKey(row) {
+    const g = numbersIn(row.grade);
+    const r = numbersIn(row.room);
+    return [g.length ? g[0] : Infinity, r.length ? r[0] : (g.length > 1 ? g[1] : Infinity)];
+  }
+  const classLabel = (row) => {
+    const k = classKey(row);
+    return isFinite(k[0]) ? 'ม.' + k[0] + (isFinite(k[1]) ? '/' + k[1] : '') : '';
+  };
   // หมวกนับเป็นใบ (ออเดอร์หนึ่งสั่งได้หลายใบ) ที่เหลือนับแถว; หมวดกำไรโชว์ยอดกำไร (บาท)
   const qtyOf = (r) => Math.max(1, Number(r.qty) || 1);
   const countOf = (view, rows) => (view.kind === 'cap' ? rows.reduce((t, r) => t + qtyOf(r), 0)
@@ -392,6 +421,104 @@
     for (const input of document.querySelectorAll('#pricing-form [data-price]')) input.value = String(P[input.dataset.price]);
   }
 
+  // ---------- เช็กลิสต์แจกของ (checklist.html) ----------
+  // เสื้อ/หมวกทุกสีรวมกัน จัดกลุ่มตามชั้น/ห้องของคนสั่ง (เรียงเป็นตัวเลข: ม.1/2, ม.1/5, ม.2/5, ม.5/2, ม.6/7)
+  // ในกลุ่มเรียงตามชื่อ แถวที่ไม่รู้ชั้นไปท้ายสุด ติ๊ก "แจกแล้ว" แล้วบันทึกลงคอลัมน์ "แจกแล้ว" ในชีต
+  const CHECKLIST_VIEWS = [{ key: 'cl:shirt', kind: 'clshirt', label: 'เสื้อ' }, { key: 'cl:cap', kind: 'clcap', label: 'หมวก' }];
+  function checklistItems(kind) {
+    const rows = kind === 'clcap' ? state.data.caps : state.data.shirts;
+    const items = rows.map((r, i) => ({
+      row: r, i, kind: kind === 'clcap' ? 'cap' : 'shirt', key: editKey(r),
+      who: kind === 'clcap' ? text(r.name) : text(r.buyer),
+      cls: classLabel(r), ck: classKey(r),
+      item: kind === 'clcap'
+        ? [text(r.product) || 'หมวก', qtyOf(r) > 1 ? qtyOf(r) + ' ใบ' : ''].filter(Boolean).join(' · ')
+        : ['Jersey ' + (text(r.color) || ''), text(r.size), text(r.name), text(r.number)].filter(Boolean).join(' · '),
+      qty: kind === 'clcap' ? qtyOf(r) : 1,
+    }));
+    const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+    items.sort((a, b) => cmp(a.ck[0], b.ck[0]) || cmp(a.ck[1], b.ck[1]) || cmp(a.who.toLowerCase(), b.who.toLowerCase()) || a.i - b.i);
+    return items;
+  }
+  function clMatches(it) {
+    if (!state.q) return true;
+    const q = state.q.toLowerCase();
+    if (/^#\d+$/.test(q)) return it.key === q || it.key.indexOf(q + '-') === 0;
+    return [it.who, it.item, it.cls, it.key, it.row.name, it.row.grade, it.row.room].some((v) => text(v).toLowerCase().includes(q));
+  }
+  function renderChecklist() {
+    const d = state.data;
+    const has = (rows, key) => rows.some((r) => Object.prototype.hasOwnProperty.call(r, key));
+    state.withOrder = has(d.shirts.concat(d.caps), 'order');
+    state.withQty = has(d.caps, 'qty');
+    state.withGiven = has(d.shirts.concat(d.caps), 'given');
+    const view = currentView();
+    state.view = view.key;
+    const all = checklistItems(view.kind);
+    const given = all.filter((it) => it.row.given).reduce((t, it) => t + it.qty, 0);
+    const total = all.reduce((t, it) => t + it.qty, 0);
+    const unit = view.kind === 'clcap' ? 'ใบ' : 'ตัว';
+    $('switch').replaceChildren(...CHECKLIST_VIEWS.map((v) => {
+      const items = checklistItems(v.kind);
+      const left = items.filter((it) => !it.row.given).reduce((t, it) => t + it.qty, 0);
+      return el('button', { type: 'button', 'data-view': v.key, 'aria-pressed': String(v.key === view.key) }, [
+        el('span', { class: 'label' }, [v.label, el('span', { class: 'sub', text: 'ยังไม่แจก' })]),
+        el('span', { class: 'num', text: String(left) }),
+      ]);
+    }));
+    $('q').placeholder = 'ชื่อ ชั้น/ห้อง รายการ หรือ #ออเดอร์';
+    $('q-clear').hidden = !state.q;
+    const hideBox = $('hide-given');
+    if (hideBox) hideBox.checked = state.hideGiven;
+    const shown = all.filter(clMatches).filter((it) => !(state.hideGiven && it.row.given));
+    $('status').textContent = state.q ? (shown.length ? 'พบ ' + shown.length + ' รายการ' : 'ไม่พบ "' + state.q + '"') : '';
+    $('run').replaceChildren(
+      runItem('แจกแล้ว', given),
+      runItem('ยังไม่แจก', total - given),
+      runItem('รวม (' + unit + ')', total, 'total'),
+    );
+    $('thead').closest('table').className = 'checklist cards';
+    $('thead').replaceChildren(el('tr', null, [
+      el('th', { scope: 'col', text: 'ชื่อ' }),
+      el('th', { scope: 'col', text: 'รายการ' }),
+      el('th', { scope: 'col', text: 'ออเดอร์' }),
+      el('th', { scope: 'col', text: 'แจกแล้ว' }),
+    ]));
+    const rows = [];
+    let lastCls = null;
+    shown.forEach((it) => {
+      const cls = it.cls || 'ไม่ระบุชั้น';
+      if (cls !== lastCls) {
+        const inGroup = shown.filter((x) => (x.cls || 'ไม่ระบุชั้น') === cls);
+        const left = inGroup.filter((x) => !x.row.given).reduce((t, x) => t + x.qty, 0);
+        rows.push(el('tr', { class: 'section' }, [el('th', { scope: 'colgroup', colspan: '4' }, [
+          cls, el('span', { class: 'group-count', text: left ? 'ยังไม่แจก ' + left + ' ' + unit : 'แจกครบแล้ว' }),
+        ])]));
+        lastCls = cls;
+      }
+      rows.push(el('tr', { class: it.row.given ? 'done' : null }, [
+        el('td', { class: 'who' }, [it.who || el('span', { class: 'muted', text: '-' })]),
+        el('td', { class: 'item', text: it.item }),
+        it.key ? el('td', { class: 'order', text: it.key }) : el('td', { class: 'order' }, [el('span', { class: 'manual', text: 'เพิ่มเอง' })]),
+        givenCell(it.row, it.kind) || el('td', { class: 'given' }),
+      ]));
+    });
+    $('tbody').replaceChildren(...rows);
+    const empty = shown.length === 0;
+    $('empty').hidden = !empty;
+    if (empty) $('empty-text').textContent = state.q ? 'ไม่พบ "' + state.q + '"' : state.hideGiven && all.length ? 'แจกครบทุกรายการแล้ว' : 'ยังไม่มีรายการ';
+    $('subtitle').textContent = d.demo ? 'ตัวอย่างข้อมูลสมมติ' : (d.onlyVerified ? 'รายการที่สลิปผ่านแล้ว' : 'ทุกรายการ');
+    const updated = toDate(d.updatedAt);
+    $('updated').textContent = updated ? 'อัปเดตล่าสุด ' + timeFmt.format(updated) : '';
+    const link = safeLink(d.sheetUrl);
+    $('sheet-link').hidden = !link;
+    if (link) $('sheet-link').href = link;
+    const note = $('mode-note');
+    const oldScript = !!(state.auth && state.auth.mode === 'password');
+    note.hidden = !oldScript;
+    note.textContent = oldScript ? 'สคริปต์รุ่นเก่า: ปิดหน้านี้แล้วต้องเข้าสู่ระบบใหม่' : '';
+  }
+
   function inRange(row) {
     if (!state.from && !state.to) return true;
     const d = dayKey(row.time);
@@ -441,6 +568,38 @@
   // แก้ชื่อ/เลขหลังเสื้อได้เมื่อแถวมีเลขออเดอร์ (สคริปต์ต้องมี Update.gs ด้วย จึงจะบันทึกลงชีตได้)
   const canEdit = () => state.withOrder && !!state.auth;
   const editKey = (row) => text(row.order);
+  // ช่องติ๊ก "แจกแล้ว" (ของถึงมือคนสั่งแล้ว) บันทึกลงคอลัมน์ "แจกแล้ว" ในชีตผ่าน action: 'update'
+  function givenCell(row, kind) {
+    if (!canEdit()) return null;
+    const key = editKey(row);
+    if (!key) return el('td', { class: 'given' });
+    return el('td', { class: 'given' }, [el('label', { class: 'given-box' + (row.given ? ' on' : '') }, [
+      el('input', { type: 'checkbox', 'data-given': key, 'data-kind': kind, checked: row.given ? '' : null, 'aria-label': 'แจกแล้ว ' + key }),
+      el('span', { text: row.given ? 'แจกแล้ว' : 'ยังไม่แจก' }),
+    ])]);
+  }
+  async function saveGiven(cb) {
+    const kind = cb.dataset.kind;
+    const key = cb.dataset.given;
+    const value = cb.checked;
+    const row = (kind === 'cap' ? state.data.caps : state.data.shirts).find((r) => editKey(r) === key);
+    if (!row) return;
+    cb.disabled = true;
+    try {
+      if (state.auth.mode !== 'demo') {
+        const json = await callApi(authBody({ action: 'update', kind, order: key, given: value }));
+        if (!json.updated) throw new Error('สคริปต์ของชีตยังไม่รองรับช่องแจกแล้ว: อัปเดต Code.gs ตามขั้นตอนใน README ก่อน');
+      }
+      row.given = value;
+      render();
+      toast((value ? 'ติ๊กแจกแล้ว ' : 'เอาติ๊กออก ') + key, 1500);
+    } catch (err) {
+      cb.checked = !value;
+      cb.disabled = false;
+      if (err.auth && err.code === 'session') showLogin(err.message);
+      else toast(err.message || 'บันทึกไม่สำเร็จ');
+    }
+  }
   function shirtRow(row, i) {
     const nameBad = badName(row.name);
     const numberBad = badNumber(row.number);
@@ -625,10 +784,7 @@
     }
     const withShirt = rows.filter((r) => /jersey|เสื้อ/i.test(text(r.product))).reduce((t, r) => t + qtyOf(r), 0);
     const total = countOf(view, rows);
-    return {
-      items: [['สั่งคู่กับเสื้อ', withShirt], ['หมวกอย่างเดียว', total - withShirt]],
-      total: ['รวม (ใบ)', total],
-    };
+    return { items: [['สั่งคู่กับเสื้อ', withShirt], ['หมวกอย่างเดียว', total - withShirt]], total: ['รวม (ใบ)', total] };
   }
 
   function rangeText() {
@@ -641,6 +797,7 @@
   function render() {
     const d = state.data;
     if (!d) return;
+    if (CHECKLIST) return renderChecklist();
     const views = viewList(d);
     const view = currentView();
     state.view = view.key;
@@ -648,6 +805,7 @@
     const has = (rows, key) => rows.some((r) => Object.prototype.hasOwnProperty.call(r, key));
     state.withOrder = has(d.shirts.concat(d.caps, d.shipping || []), 'order');
     state.withQty = has(d.caps, 'qty');
+    state.withGiven = has(d.shirts.concat(d.caps), 'given');
     const rows = rowsOf(view, true);
     const shown = view.kind === 'profit' ? rows : rows.filter(matches);
 
@@ -929,7 +1087,7 @@
     }
   }
 
-  $('login-form').addEventListener('submit', async (e) => {
+  on('login-form', 'submit', async (e) => {
     e.preventDefault();
     if (state.busy) return;
     const f = e.target;
@@ -961,7 +1119,7 @@
     }
   });
 
-  $('pw-toggle').addEventListener('click', () => {
+  on('pw-toggle', 'click', () => {
     const pass = $('password');
     const btn = $('pw-toggle');
     const showing = pass.type === 'text';
@@ -971,9 +1129,9 @@
     pass.focus();
   });
 
-  $('logout').addEventListener('click', logout);
-  $('refresh').addEventListener('click', () => doRefresh());
-  $('refresh-top').addEventListener('click', () => doRefresh());
+  on('logout', 'click', logout);
+  on('refresh', 'click', () => doRefresh());
+  on('refresh-top', 'click', () => doRefresh());
 
   // กลับมาที่แท็บ/แอปหลังจากห่างไปสักพัก: ดึงข้อมูลใหม่ให้เงียบ ๆ
   document.addEventListener('visibilitychange', () => {
@@ -983,26 +1141,26 @@
   });
 
   // ---------- controls ----------
-  $('switch').addEventListener('click', (e) => {
+  on('switch', 'click', (e) => {
     const b = e.target.closest('button[data-view]');
     if (!b) return;
     state.view = b.dataset.view;
-    writeUi({ view: state.view });
+    writeUi({ view: state.view, hideGiven: state.hideGiven });
     render();
   });
-  $('toast').addEventListener('click', hideToast);
-  $('from').addEventListener('change', (e) => { state.from = e.target.value; render(); });
-  $('to').addEventListener('change', (e) => { state.to = e.target.value; render(); });
-  $('q').addEventListener('input', (e) => { state.q = e.target.value.trim(); render(); });
-  $('searchbar').addEventListener('submit', (e) => { e.preventDefault(); $('q').blur(); });
-  $('q-clear').addEventListener('click', () => { state.q = ''; $('q').value = ''; render(); $('q').focus(); });
+  on('toast', 'click', hideToast);
+  on('from', 'change', (e) => { state.from = e.target.value; render(); });
+  on('to', 'change', (e) => { state.to = e.target.value; render(); });
+  on('q', 'input', (e) => { state.q = e.target.value.trim(); render(); });
+  on('searchbar', 'submit', (e) => { e.preventDefault(); $('q').blur(); });
+  on('q-clear', 'click', () => { state.q = ''; $('q').value = ''; render(); $('q').focus(); });
   const clearDates = () => { state.from = state.to = ''; $('from').value = $('to').value = ''; render(); };
-  $('clear-dates').addEventListener('click', clearDates);
-  $('empty-reset').addEventListener('click', clearDates);
-  $('export').addEventListener('click', exportExcel);
+  on('clear-dates', 'click', clearDates);
+  on('empty-reset', 'click', clearDates);
+  on('export', 'click', exportExcel);
 
   // แก้ไขชื่อ/เลขหลังเสื้อ
-  $('tbody').addEventListener('click', (e) => {
+  on('tbody', 'click', (e) => {
     const btn = e.target.closest('[data-edit]');
     if (btn) {
       if (state.busy) return;
@@ -1014,14 +1172,20 @@
     }
     if (e.target.closest('#edit-cancel')) { state.editing = null; render(); }
   });
-  $('edit-form').addEventListener('submit', (e) => { e.preventDefault(); saveEdit(); });
+  on('edit-form', 'submit', (e) => { e.preventDefault(); saveEdit(); });
+  on('hide-given', 'change', (e) => { state.hideGiven = e.target.checked; writeUi({ view: state.view, hideGiven: state.hideGiven }); render(); });
+  on('tbody', 'change', (e) => {
+    const cb = e.target.closest('[data-given]');
+    if (cb) saveGiven(cb);
+  });
+
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && state.editing) { state.editing = null; render(); }
   });
 
   // คอลัมน์ในไฟล์ Excel
   state.exportPrefs = readExportPrefs();
-  $('columns-list').addEventListener('change', (e) => {
+  on('columns-list', 'change', (e) => {
     const view = currentView();
     if (!view || view.kind === 'profit') return;
     const pref = exportPref(view.kind);
@@ -1040,7 +1204,7 @@
   // ราคาและต้นทุน: แก้แล้วคำนวณใหม่ทันที เก็บไว้ในเครื่องนี้
   state.pricing = readPricing();
   syncPricingForm();
-  $('pricing-form').addEventListener('input', (e) => {
+  on('pricing-form', 'input', (e) => {
     const input = e.target.closest('[data-price]');
     if (!input) return;
     const n = Number(input.value);
@@ -1050,8 +1214,8 @@
       render();
     }
   });
-  $('pricing-form').addEventListener('submit', (e) => e.preventDefault());
-  $('pricing-reset').addEventListener('click', () => {
+  on('pricing-form', 'submit', (e) => e.preventDefault());
+  on('pricing-reset', 'click', () => {
     state.pricing = Object.assign({}, PRICING_DEFAULTS);
     writePricing(state.pricing);
     syncPricingForm();
@@ -1069,7 +1233,7 @@
 
   // ช่วงวันที่: พับไว้บนมือถือ กางเสมอบนจอกว้าง
   const wide = window.matchMedia('(min-width: 860px)');
-  const syncMore = () => { if (wide.matches) $('more').open = true; };
+  const syncMore = () => { if (wide.matches && $('more')) $('more').open = true; };
   syncMore();
   if (wide.addEventListener) wide.addEventListener('change', syncMore);
 
@@ -1077,7 +1241,7 @@
   (async () => {
     forgetLegacy();
     const ui = readUi();
-    if (ui) state.view = ui.view;
+    if (ui) { state.view = ui.view; state.hideGiven = ui.hideGiven; }
     if (DEMO) {
       try { await signIn('', ''); } catch (err) { showLogin(err.message); }
       return;

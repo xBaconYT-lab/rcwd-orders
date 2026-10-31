@@ -15,18 +15,22 @@
  *  4. Deploy > Manage deployments > Edit > Version: New version
  *
  * หน้าเว็บส่งมา: { action: 'update', kind: 'shirt', order: '#9-1', color: 'เขียว', name: 'FLAG', number: '63' }
+ *   หรือจากหน้าเช็กลิสต์: { action: 'update', kind: 'shirt' | 'cap', order: '#9-1', given: true }
+ *   (ติ๊ก "แจกแล้ว": ต้องมีคอลัมน์หัวว่า "แจกแล้ว" ในแท็บเสื้อ/หมวก สร้างเองได้เลย สคริปต์เขียน TRUE/FALSE ลงช่องนั้น)
  * สคริปต์ตอบ:   { ok: true, updated: true, changed: 2 } หรือ { ok: false, error: '...' }
  */
 var RCWD_UPDATE = (function () {
   var CONFIG = {
     // แท็บที่มีรายการเสื้อ (ตามสี) — ชื่อต้องตรงกับในชีต; ถ้าเสื้อทุกสีอยู่แท็บเดียว ใส่แค่ชื่อเดียว
     sheets: ['Jersey เขียว', 'Jersey ขาว'],
+    capSheets: ['หมวก RCWD'],
     headerRow: 1,
     // หัวคอลัมน์ที่เป็นไปได้ (เทียบแบบไม่สนตัวพิมพ์/ช่องว่าง) ใส่เพิ่มได้ถ้าชีตใช้ชื่ออื่น
     columns: {
       order: ['ออเดอร์', 'เลขออเดอร์', 'order', 'order id'],
       name: ['ชื่อหลังเสื้อ', 'ชื่อบนเสื้อ', 'ชื่อ', 'name', 'back name'],
       number: ['เลขหลังเสื้อ', 'เบอร์เสื้อ', 'เลข', 'number', 'back number'],
+      given: ['แจกแล้ว', 'รับแล้ว', 'given'],
     },
     logSheet: 'แก้ไขจากเว็บ (log)',
     maxName: 20,
@@ -43,7 +47,7 @@ var RCWD_UPDATE = (function () {
 
   function handle(body, user) {
     if (!body || typeof body !== 'object') return fail('คำขอไม่ถูกต้อง');
-    if (body.kind !== 'shirt') return fail('แก้ได้เฉพาะรายการเสื้อ');
+    if (body.kind !== 'shirt' && body.kind !== 'cap') return fail('แก้ได้เฉพาะรายการเสื้อหรือหมวก');
     var order = String(body.order || '').trim();
     if (!/^#\d{1,6}(-\d{1,3})?$/.test(order)) return fail('เลขออเดอร์ไม่ถูกต้อง');
     var fields = {};
@@ -58,6 +62,8 @@ var RCWD_UPDATE = (function () {
       if (!/^\d{1,3}$/.test(number)) return fail('เลขหลังเสื้อต้องเป็นตัวเลข 1-3 หลัก');
       fields.number = number;
     }
+    if (body.given !== undefined) fields.given = body.given === true || body.given === 'true';
+    if (body.kind === 'cap' && (fields.name !== undefined || fields.number !== undefined)) return fail('หมวกแก้ได้เฉพาะช่องแจกแล้ว');
     var keys = Object.keys(fields);
     if (!keys.length) return fail('ไม่มีอะไรให้แก้');
 
@@ -66,8 +72,9 @@ var RCWD_UPDATE = (function () {
     try {
       var ss = SpreadsheetApp.getActiveSpreadsheet();
       var hit = null;
-      for (var i = 0; i < CONFIG.sheets.length; i++) {
-        var sheet = ss.getSheetByName(CONFIG.sheets[i]);
+      var sheetNames = body.kind === 'cap' ? CONFIG.capSheets : CONFIG.sheets;
+      for (var i = 0; i < sheetNames.length; i++) {
+        var sheet = ss.getSheetByName(sheetNames[i]);
         if (!sheet || sheet.getLastRow() < CONFIG.headerRow + 1) continue;
         var values = sheet.getRange(CONFIG.headerRow, 1, sheet.getLastRow() - CONFIG.headerRow + 1, sheet.getLastColumn()).getValues();
         var headers = values[0];
@@ -87,7 +94,8 @@ var RCWD_UPDATE = (function () {
         var col = findCol(hit.headers, CONFIG.columns[field]);
         if (col < 0) return fail('ไม่พบคอลัมน์ "' + CONFIG.columns[field][0] + '" ในแท็บ ' + hit.sheet.getName() + ' (ปรับ CONFIG ใน Update.gs)');
         var oldValue = hit.values[col];
-        if (norm(oldValue) === norm(fields[field])) continue;
+        if (field === 'given') { if ((oldValue === true || norm(oldValue) === 'true') === fields.given) continue; }
+        else if (norm(oldValue) === norm(fields[field])) continue;
         changes.push({ col: col, field: field, oldValue: oldValue, value: fields[field] });
       }
       if (!changes.length) return { ok: true, updated: true, changed: 0 };
@@ -103,7 +111,8 @@ var RCWD_UPDATE = (function () {
         // เลขหลังเสื้อเก็บเป็นข้อความ เพื่อให้ "07" ไม่กลายเป็น 7
         if (ch.field === 'number') cell.setNumberFormat('@');
         cell.setValue(ch.value);
-        log.appendRow([new Date(), String(user || ''), hit.sheet.getName(), hit.row, order, ch.field === 'name' ? 'ชื่อหลังเสื้อ' : 'เลขหลังเสื้อ', String(ch.oldValue), ch.value]);
+        var label = ch.field === 'name' ? 'ชื่อหลังเสื้อ' : ch.field === 'number' ? 'เลขหลังเสื้อ' : 'แจกแล้ว';
+        log.appendRow([new Date(), String(user || ''), hit.sheet.getName(), hit.row, order, label, String(ch.oldValue), String(ch.value)]);
       }
       return { ok: true, updated: true, changed: changes.length };
     } catch (err) {

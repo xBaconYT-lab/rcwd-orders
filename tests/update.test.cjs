@@ -43,6 +43,10 @@ const reset = () => {
     ['2026-10-03', '#2-1', 'L', 'DEMO', 7, 'https://drive.google.com/x'],
     ['2026-10-05', '#9-2', '3XL', 'STAND', '70', ''],
   ]);
+  sheets['หมวก RCWD'] = fakeSheet('หมวก RCWD', [
+    ['ลำดับ', 'ชื่อ', 'ชั้น', 'ห้อง', 'สินค้าที่สั่ง', 'จำนวน (ใบ)', 'ออเดอร์', 'แจกแล้ว'],
+    [1, 'ตัวอย่าง สอง', 'ม.2', '3', 'หมวก RCWD', 3, '#21', false],
+  ]);
   sheets['Jersey ขาว'] = fakeSheet('Jersey ขาว', [
     ['ประทับเวลา', 'ออเดอร์', 'Size', 'ชื่อหลังเสื้อ', 'เลขหลังเสื้อ', 'สลิป'],
     ['2026-10-05', '#9-1', 'M', 'FLAG', '63', ''],
@@ -100,6 +104,16 @@ test('a missing column is reported, not guessed', () => {
   const r = U.handle({ kind: 'shirt', order: '#9-1', number: '1' });
   assert.equal(r.ok, false);
   assert.match(r.error, /เลขหลังเสื้อ/);
+});
+
+test('ticking แจกแล้ว writes TRUE into that column of the cap row and logs it', () => {
+  const r = U.handle({ kind: 'cap', order: '#21', given: true }, 'staff');
+  assert.equal(JSON.stringify(r), JSON.stringify({ ok: true, updated: true, changed: 1 }));
+  assert.equal(sheets['หมวก RCWD'].data[1][7], true);
+  assert.equal(JSON.stringify(sheets['แก้ไขจากเว็บ (log)'].data[1].slice(4)), JSON.stringify(['#21', 'แจกแล้ว', 'false', 'true']));
+  assert.equal(U.handle({ kind: 'cap', order: '#21', given: true }).changed, 0, 'already ticked: nothing to change');
+  assert.equal(U.handle({ kind: 'cap', order: '#21', name: 'X' }).ok, false, 'caps: only the given flag');
+  assert.equal(U.handle({ kind: 'shirt', order: '#9-1', given: true }).ok, false, 'shirt tab without a แจกแล้ว column is reported');
 });
 
 test('a busy sheet asks to retry', () => {
