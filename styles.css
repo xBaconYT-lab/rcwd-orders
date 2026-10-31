@@ -225,7 +225,9 @@ input[type="search"]::-webkit-search-results-button { -webkit-appearance: none; 
 .given-box.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
 /* เช็กลิสต์แจกของ */
 .cl-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0 0 14px; }
-.cl-note { font-size: 0.8125rem; color: var(--muted); }
+.cl-note { font-size: 0.8125rem; color: var(--muted); flex-basis: 100%; }
+.cl-columns { margin: -6px 0 14px; }
+.cl-bar .btn { white-space: normal; max-width: 100%; text-align: center; }
 .switch .label .sub { display: block; font-size: 0.75rem; font-weight: 400; color: var(--muted); }
 table.checklist tr.section th { padding: 14px 14px 6px; font-size: 0.9375rem; font-weight: 700; color: var(--ink); background: var(--bg); }
 table.checklist tr.section .group-count { margin-left: 10px; font-size: 0.8125rem; font-weight: 500; color: var(--muted); }
@@ -233,6 +235,16 @@ table.checklist td.who { font-weight: 600; }
 table.checklist td.order { color: var(--muted); font-size: 0.875rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
 table.checklist td.given { text-align: right; white-space: nowrap; }
 table.checklist tr.done td.who, table.checklist tr.done td.item { color: var(--muted); }
+table.checklist .items { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+table.checklist .items li { display: flex; align-items: center; gap: 8px; }
+table.checklist .items li.got { text-decoration: line-through; color: var(--muted); }
+table.checklist .dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--line); flex: none; }
+table.checklist .dot.green { background: #1f7a55; border-color: #1f7a55; }
+table.checklist .dot.white { background: #ffffff; border-color: #b9c9c0; }
+table.checklist .dot.cap { border-radius: 3px; background: var(--ink); border-color: var(--ink); }
+table.checklist .dot.other { background: var(--line); }
+.ship-tag { display: inline-block; margin-left: 8px; padding: 1px 8px; font-size: 0.75rem; font-weight: 500; color: var(--muted); border: 1px dashed var(--line); border-radius: 999px; }
+.given-box.some { border-style: dashed; color: var(--ink); }
 /* เลือกคอลัมน์ที่จะลงไฟล์ Excel */
 .columns { grid-column: 1 / -1; }
 .columns > summary {

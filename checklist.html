@@ -41,7 +41,7 @@
 <main class="login" id="login" hidden>
   <form id="login-form" autocomplete="on" novalidate>
     <h1 class="mark"><span class="num">RCWD</span><span>Jersey 2026</span></h1>
-    <p class="lead">เช็กลิสต์แจกเสื้อและหมวก เรียงตามชั้น/ห้อง <span class="nowrap">สำหรับทีมงาน</span></p>
+    <p class="lead">เช็กลิสต์แจกของ ทีละคนสั่ง เรียงตามชั้น/ห้อง <span class="nowrap">สำหรับทีมงาน</span></p>
     <label class="field" for="username"><span>ชื่อผู้ใช้</span></label>
     <input class="field-input" id="username" name="username" autocomplete="username" required autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="text" enterkeyhint="next" maxlength="64">
     <label class="field" for="password"><span>รหัสผ่าน</span></label>
@@ -93,8 +93,16 @@
 
   <div class="cl-bar">
     <label class="given-box cl-hide"><input type="checkbox" id="hide-given"><span>ซ่อนที่แจกแล้ว</span></label>
-    <span class="cl-note">ติ๊กเมื่อของถึงมือคนสั่งแล้ว บันทึกลงชีตทันที</span>
+    <button class="btn primary" type="button" id="export">ดาวน์โหลด Excel</button>
+    <span class="cl-note">หนึ่งแถว = หนึ่งคนสั่ง รวมทุกชิ้นที่ต้องให้ ติ๊กเมื่อส่งของครบแล้ว บันทึกลงชีตทันที</span>
   </div>
+  <details class="columns cl-columns" id="columns">
+    <summary>
+      <span class="more-title">เลือกคอลัมน์ในไฟล์ Excel</span>
+      <span class="more-state" id="columns-state">ทุกคอลัมน์</span>
+    </summary>
+    <div class="columns-list" id="columns-list"></div>
+  </details>
 
 
   <section class="panel" aria-labelledby="app-title">
