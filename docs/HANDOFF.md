@@ -207,6 +207,10 @@ Where the button is: **in the Google Sheet menu, not on the website** — RCWD >
 
 ## 7. Conventions for future changes
 
+- **Before committing a release run `sh scripts-stamp.sh`**: it rewrites `app.js?v=<commit>`, `styles.css?v=…`,
+  `xlsx-lite.js?v=…` in both HTML files so Safari/GitHub Pages caches never serve an old script after a deploy
+  (the classic "my change isn't there" symptom). The stamp is the previous commit's hash, which is fine: it only has to change.
+
 - Thai UI text; keep "RCWD Jersey 2026" and feature names. Pills for buttons, cards on phones, tables on desktop.
 - Every action that writes goes through `{action:'update'}` with explicit validation server-side; always log old values; never delete.
 - Test with the demo (`?demo`) first, then mocked backend, then real.
