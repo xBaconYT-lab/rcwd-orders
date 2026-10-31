@@ -45,8 +45,69 @@ var RCWD_UPDATE = (function () {
     return -1;
   }
 
+  // หน้าเช็กลิสต์ส่งหลายออเดอร์มาทีเดียว: { kind: 'orders', changes: [{ order: '#9', given: true }, ...] }
+  // ติ๊กทุกแถวของออเดอร์นั้น (เสื้อ #9-1, #9-2 และหมวก #9) ในคำขอเดียว
+  function handleOrders(body, user) {
+    var changes = Array.isArray(body.changes) ? body.changes.slice(0, 50) : [];
+    if (!changes.length) return fail('ไม่มีอะไรให้แก้');
+    var total = 0;
+    for (var i = 0; i < changes.length; i++) {
+      var c = changes[i] || {};
+      var key = String(c.order || '').trim();
+      if (!/^#\d{1,6}$/.test(key)) return fail('เลขออเดอร์ไม่ถูกต้อง: ' + key);
+      var given = c.given === true || c.given === 'true';
+      var kinds = ['shirt', 'cap'];
+      for (var k = 0; k < kinds.length; k++) {
+        var names = kinds[k] === 'cap' ? CONFIG.capSheets : CONFIG.sheets;
+        for (var n = 0; n < names.length; n++) {
+          var r = setGivenInSheet(names[n], key, given, user);
+          if (r.error) return fail(r.error);
+          total += r.changed;
+        }
+      }
+    }
+    return { ok: true, updated: true, changed: total };
+  }
+  // ติ๊ก/เอาติ๊กออก ทุกแถวในแท็บนี้ที่ออเดอร์เป็น key หรือ key-n
+  function setGivenInSheet(sheetName, key, given, user) {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName(sheetName);
+    if (!sheet || sheet.getLastRow() < CONFIG.headerRow + 1) return { changed: 0 };
+    var values = sheet.getRange(CONFIG.headerRow, 1, sheet.getLastRow() - CONFIG.headerRow + 1, sheet.getLastColumn()).getValues();
+    var oc = findCol(values[0], CONFIG.columns.order);
+    var gc = findCol(values[0], CONFIG.columns.given);
+    if (oc < 0) return { changed: 0 };
+    if (gc < 0) return { error: 'ไม่พบคอลัมน์ "' + CONFIG.columns.given[0] + '" ในแท็บ ' + sheetName };
+    var changed = 0;
+    for (var r = 1; r < values.length; r++) {
+      var cell = norm(values[r][oc]);
+      if (cell !== norm(key) && cell.indexOf(norm(key) + '-') !== 0) continue;
+      var was = values[r][gc] === true || norm(values[r][gc]) === 'true';
+      if (was === given) continue;
+      sheet.getRange(CONFIG.headerRow + r, gc + 1).setValue(given);
+      logChange(ss, user, sheetName, CONFIG.headerRow + r, String(values[r][oc]), 'แจกแล้ว', String(was), String(given));
+      changed++;
+    }
+    return { changed: changed };
+  }
+  function logChange(ss, user, sheetName, row, order, label, oldValue, value) {
+    var log = ss.getSheetByName(CONFIG.logSheet);
+    if (!log) {
+      log = ss.insertSheet(CONFIG.logSheet);
+      log.appendRow(['เวลา', 'ผู้แก้', 'แท็บ', 'แถว', 'ออเดอร์', 'ช่อง', 'ค่าเดิม', 'ค่าใหม่']);
+    }
+    log.appendRow([new Date(), String(user || ''), sheetName, row, order, label, oldValue, value]);
+  }
+
   function handle(body, user) {
     if (!body || typeof body !== 'object') return fail('คำขอไม่ถูกต้อง');
+    if (body.kind === 'orders') {
+      var lk = LockService.getScriptLock();
+      if (!lk.tryLock(10000)) return fail('ชีตกำลังถูกใช้งาน ลองใหม่อีกครั้ง');
+      try { return handleOrders(body, user); }
+      catch (err) { return fail('แก้ไขไม่สำเร็จ: ' + (err && err.message ? err.message : err)); }
+      finally { lk.releaseLock(); }
+    }
     if (body.kind !== 'shirt' && body.kind !== 'cap') return fail('แก้ได้เฉพาะรายการเสื้อหรือหมวก');
     var order = String(body.order || '').trim();
     if (!/^#\d{1,6}(-\d{1,3})?$/.test(order)) return fail('เลขออเดอร์ไม่ถูกต้อง');
