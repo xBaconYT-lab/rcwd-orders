@@ -141,7 +141,7 @@
       const v = JSON.parse(localStorage.getItem(EXPORT_KEY) || 'null');
       if (!v || typeof v !== 'object') return {};
       const out = {};
-      for (const kind of ['shirt', 'cap', 'ship']) {
+      for (const kind of ['shirt', 'cap', 'ship', 'checklist']) {
         const p = v[kind];
         if (p && typeof p === 'object') out[kind] = { off: Array.isArray(p.off) ? p.off.map(text).slice(0, 40) : [], summary: p.summary !== false };
       }
@@ -224,8 +224,8 @@
       { order: '#24', product: 'RCWD Jersey + หมวก RCWD', qty: 1 },
     ];
     // ชั้น/ห้อง หลายแบบที่คนกรอกจริง: "ม.5" + "2", "1/2" ในช่องชั้น, เลขไทย — เรียงแล้วต้องได้ 1/2, 1/5, 2/5, 5/2, 6/7
-    const capGrades = [['ม.5', '2'], ['1/2', ''], ['ม.๖', '7'], ['ม.2', '5'], ['1', '5']];
-    const caps = ['ตัวอย่าง หนึ่ง', 'ตัวอย่าง สอง', 'ตัวอย่าง สาม', 'ตัวอย่าง สี่', 'ตัวอย่าง ห้า'].map((n, i) => ({
+    const capGrades = [['5/2', ''], ['1/2', ''], ['ม.๑', '5'], ['ม.2', '5'], ['1', '5']];
+    const caps = ['นักเรียน ข', 'ตัวอย่าง สอง', 'นักเรียน ญ', 'ตัวอย่าง สี่', 'ตัวอย่าง ห้า'].map((n, i) => ({
       order: capOrders[i].order, time: day(4 + (i % 4)), name: n, grade: capGrades[i][0], room: capGrades[i][1], phone: '0800000' + String(100 + i),
       social: '@demo' + (i + 1), product: capOrders[i].product, qty: capOrders[i].qty, slip: '', given: i === 1 || i === 3,
     }));
@@ -262,7 +262,7 @@
     return views;
   }
   function currentView() {
-    const views = CHECKLIST ? CHECKLIST_VIEWS : viewList(state.data);
+    const views = viewList(state.data);
     return views.find((v) => v.key === state.view) || views[0];
   }
   function rowsOf(view, onlyInRange) {
@@ -422,29 +422,84 @@
   }
 
   // ---------- เช็กลิสต์แจกของ (checklist.html) ----------
-  // เสื้อ/หมวกทุกสีรวมกัน จัดกลุ่มตามชั้น/ห้องของคนสั่ง (เรียงเป็นตัวเลข: ม.1/2, ม.1/5, ม.2/5, ม.5/2, ม.6/7)
-  // ในกลุ่มเรียงตามชื่อ แถวที่ไม่รู้ชั้นไปท้ายสุด ติ๊ก "แจกแล้ว" แล้วบันทึกลงคอลัมน์ "แจกแล้ว" ในชีต
-  const CHECKLIST_VIEWS = [{ key: 'cl:shirt', kind: 'clshirt', label: 'เสื้อ' }, { key: 'cl:cap', kind: 'clcap', label: 'หมวก' }];
-  function checklistItems(kind) {
-    const rows = kind === 'clcap' ? state.data.caps : state.data.shirts;
-    const items = rows.map((r, i) => ({
-      row: r, i, kind: kind === 'clcap' ? 'cap' : 'shirt', key: editKey(r),
-      who: kind === 'clcap' ? text(r.name) : text(r.buyer),
-      cls: classLabel(r), ck: classKey(r),
-      item: kind === 'clcap'
-        ? [text(r.product) || 'หมวก', qtyOf(r) > 1 ? qtyOf(r) + ' ใบ' : ''].filter(Boolean).join(' · ')
-        : ['Jersey ' + (text(r.color) || ''), text(r.size), text(r.name), text(r.number)].filter(Boolean).join(' · '),
-      qty: kind === 'clcap' ? qtyOf(r) : 1,
-    }));
+  // หนึ่งรายการ = หนึ่งออเดอร์ (คนสั่งหนึ่งคน) รวมทุกชิ้นที่ซื้อ: เสื้อแต่ละตัว (สี ไซซ์ ชื่อ เลข) และหมวก (จำนวนใบ)
+  // จัดกลุ่มตามชั้น/ห้องของคนสั่ง เรียงเป็นตัวเลข (ม.1/2, ม.1/5, ม.2/5, ม.5/2, ม.6/7) ในกลุ่มเรียงตามชื่อ
+  // ติ๊ก "แจกแล้ว" ครั้งเดียวต่อออเดอร์: บันทึกคอลัมน์ "แจกแล้ว" ของทุกแถวในออเดอร์นั้น (เสื้อทุกตัว + หมวก)
+  function checklistOrders() {
+    const d = state.data;
+    const byNo = new Map();
+    let manual = 0;
+    const entryFor = (row) => {
+      const no = orderNo(row);
+      const key = no ? no : 'manual:' + (manual++);
+      if (!byNo.has(key)) byNo.set(key, { no, key: no ? '#' + no : '', who: '', grade: '', room: '', items: [], rows: [], i: byNo.size, ship: false });
+      return byNo.get(key);
+    };
+    d.shirts.forEach((r) => {
+      const e = entryFor(r);
+      if (!e.who && text(r.buyer)) e.who = text(r.buyer);
+      if (!e.grade && text(r.grade)) { e.grade = text(r.grade); e.room = text(r.room); }
+      e.items.push({ kind: 'shirt', label: ['Jersey ' + (text(r.color) || ''), text(r.size), text(r.name), text(r.number)].filter(Boolean).join(' · '), row: r });
+      e.rows.push({ kind: 'shirt', row: r });
+    });
+    d.caps.forEach((r) => {
+      const e = entryFor(r);
+      if (!e.who && text(r.name)) e.who = text(r.name);
+      if (!e.grade && text(r.grade)) { e.grade = text(r.grade); e.room = text(r.room); }
+      e.items.push({ kind: 'cap', label: (text(r.product).match(/หมวก[^+·]*/) || ['หมวก'])[0].trim() + (qtyOf(r) > 1 ? ' × ' + qtyOf(r) + ' ใบ' : ' 1 ใบ'), row: r });
+      e.rows.push({ kind: 'cap', row: r });
+    });
+    (d.shipping || []).forEach((r) => { const no = orderNo(r); if (no && byNo.has(no)) byNo.get(no).ship = true; });
+    const list = Array.from(byNo.values());
+    list.forEach((e) => {
+      const fake = { grade: e.grade, room: e.room };
+      e.ck = classKey(fake);
+      e.cls = classLabel(fake);
+      e.given = e.rows.filter((x) => x.row.given).length;
+      e.state = e.given === 0 ? 'none' : e.given === e.rows.length ? 'all' : 'some';
+    });
     const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
-    items.sort((a, b) => cmp(a.ck[0], b.ck[0]) || cmp(a.ck[1], b.ck[1]) || cmp(a.who.toLowerCase(), b.who.toLowerCase()) || a.i - b.i);
-    return items;
+    list.sort((a, b) => cmp(a.ck[0], b.ck[0]) || cmp(a.ck[1], b.ck[1]) || cmp(a.who.toLowerCase(), b.who.toLowerCase()) || a.i - b.i);
+    return list;
   }
-  function clMatches(it) {
+  function clMatches(e) {
     if (!state.q) return true;
     const q = state.q.toLowerCase();
-    if (/^#\d+$/.test(q)) return it.key === q || it.key.indexOf(q + '-') === 0;
-    return [it.who, it.item, it.cls, it.key, it.row.name, it.row.grade, it.row.room].some((v) => text(v).toLowerCase().includes(q));
+    if (/^#\d+$/.test(q)) return e.key === q;
+    return [e.who, e.cls, e.key, e.grade, e.room].concat(e.items.map((it) => it.label)).some((v) => text(v).toLowerCase().includes(q));
+  }
+  function orderGivenCell(e) {
+    if (!canEdit() || !e.key) return el('td', { class: 'given' });
+    const label = e.state === 'all' ? 'แจกแล้ว' : e.state === 'some' ? 'แจกบางส่วน' : 'ยังไม่แจก';
+    const box = el('label', { class: 'given-box' + (e.state === 'all' ? ' on' : e.state === 'some' ? ' some' : '') }, [
+      el('input', { type: 'checkbox', 'data-given-order': e.key, checked: e.state === 'all' ? '' : null, 'aria-label': 'แจกแล้ว ' + e.key }),
+      el('span', { text: label }),
+    ]);
+    if (e.state === 'some') box.querySelector('input').indeterminate = true;
+    return el('td', { class: 'given' }, [box]);
+  }
+  async function saveGivenOrder(cb) {
+    const key = cb.dataset.givenOrder;
+    const entry = checklistOrders().find((e) => e.key === key);
+    if (!entry) return;
+    const value = cb.checked;
+    cb.disabled = true;
+    const todo = entry.rows.filter((x) => editKey(x.row) && !!x.row.given !== value);
+    try {
+      for (const x of todo) {
+        if (state.auth.mode !== 'demo') {
+          const json = await callApi(authBody({ action: 'update', kind: x.kind, order: editKey(x.row), given: value }));
+          if (!json.updated) throw new Error('สคริปต์ของชีตยังไม่รองรับช่องแจกแล้ว: อัปเดต Code.gs ตามขั้นตอนใน README ก่อน');
+        }
+        x.row.given = value;
+      }
+      render();
+      toast((value ? 'ติ๊กแจกแล้ว ' : 'เอาติ๊กออก ') + key + (entry.who ? ' (' + entry.who + ')' : ''), 1500);
+    } catch (err) {
+      render(); // แถวที่บันทึกไปแล้วค้างไว้ตามจริง ที่เหลือแสดงเป็นแจกบางส่วน
+      if (err.auth && err.code === 'session') showLogin(err.message);
+      else toast(err.message || 'บันทึกไม่สำเร็จ');
+    }
   }
   function renderChecklist() {
     const d = state.data;
@@ -452,61 +507,64 @@
     state.withOrder = has(d.shirts.concat(d.caps), 'order');
     state.withQty = has(d.caps, 'qty');
     state.withGiven = has(d.shirts.concat(d.caps), 'given');
-    const view = currentView();
-    state.view = view.key;
-    const all = checklistItems(view.kind);
-    const given = all.filter((it) => it.row.given).reduce((t, it) => t + it.qty, 0);
-    const total = all.reduce((t, it) => t + it.qty, 0);
-    const unit = view.kind === 'clcap' ? 'ใบ' : 'ตัว';
-    $('switch').replaceChildren(...CHECKLIST_VIEWS.map((v) => {
-      const items = checklistItems(v.kind);
-      const left = items.filter((it) => !it.row.given).reduce((t, it) => t + it.qty, 0);
-      return el('button', { type: 'button', 'data-view': v.key, 'aria-pressed': String(v.key === view.key) }, [
-        el('span', { class: 'label' }, [v.label, el('span', { class: 'sub', text: 'ยังไม่แจก' })]),
-        el('span', { class: 'num', text: String(left) }),
-      ]);
-    }));
-    $('q').placeholder = 'ชื่อ ชั้น/ห้อง รายการ หรือ #ออเดอร์';
+    const all = checklistOrders();
+    const done = all.filter((e) => e.state === 'all').length;
+    const some = all.filter((e) => e.state === 'some').length;
+    $('switch').hidden = true;
+    $('q').placeholder = 'ชื่อ ชั้น/ห้อง เสื้อ หมวก หรือ #ออเดอร์';
     $('q-clear').hidden = !state.q;
     const hideBox = $('hide-given');
     if (hideBox) hideBox.checked = state.hideGiven;
-    const shown = all.filter(clMatches).filter((it) => !(state.hideGiven && it.row.given));
-    $('status').textContent = state.q ? (shown.length ? 'พบ ' + shown.length + ' รายการ' : 'ไม่พบ "' + state.q + '"') : '';
+    const shown = all.filter(clMatches).filter((e) => !(state.hideGiven && e.state === 'all'));
+    $('status').textContent = state.q ? (shown.length ? 'พบ ' + shown.length + ' ออเดอร์' : 'ไม่พบ "' + state.q + '"') : '';
     $('run').replaceChildren(
-      runItem('แจกแล้ว', given),
-      runItem('ยังไม่แจก', total - given),
-      runItem('รวม (' + unit + ')', total, 'total'),
+      runItem('แจกแล้ว', done),
+      runItem('ยังไม่แจก', all.length - done - some),
+      ...(some ? [runItem('แจกบางส่วน', some)] : []),
+      runItem('รวม (ออเดอร์)', all.length, 'total'),
     );
+    const exportBtn = $('export');
+    if (exportBtn) {
+      exportBtn.textContent = 'ดาวน์โหลด Excel (' + shown.length + ' ออเดอร์' + (state.q ? ' ที่ค้นพบ' : state.hideGiven ? ' ที่ยังไม่แจก' : '') + ')';
+      exportBtn.disabled = shown.length === 0;
+    }
+    if ($('columns')) renderColumnPicker({ kind: 'checklist' });
     $('thead').closest('table').className = 'checklist cards';
     $('thead').replaceChildren(el('tr', null, [
-      el('th', { scope: 'col', text: 'ชื่อ' }),
-      el('th', { scope: 'col', text: 'รายการ' }),
+      el('th', { scope: 'col', text: 'คนสั่ง' }),
+      el('th', { scope: 'col', text: 'ของที่ต้องให้' }),
       el('th', { scope: 'col', text: 'ออเดอร์' }),
       el('th', { scope: 'col', text: 'แจกแล้ว' }),
     ]));
     const rows = [];
     let lastCls = null;
-    shown.forEach((it) => {
-      const cls = it.cls || 'ไม่ระบุชั้น';
+    shown.forEach((e) => {
+      const cls = e.cls || 'ไม่ระบุชั้น';
       if (cls !== lastCls) {
         const inGroup = shown.filter((x) => (x.cls || 'ไม่ระบุชั้น') === cls);
-        const left = inGroup.filter((x) => !x.row.given).reduce((t, x) => t + x.qty, 0);
+        const left = inGroup.filter((x) => x.state !== 'all').length;
         rows.push(el('tr', { class: 'section' }, [el('th', { scope: 'colgroup', colspan: '4' }, [
-          cls, el('span', { class: 'group-count', text: left ? 'ยังไม่แจก ' + left + ' ' + unit : 'แจกครบแล้ว' }),
+          cls, el('span', { class: 'group-count', text: left ? 'ยังไม่แจก ' + left + ' ออเดอร์' : 'แจกครบแล้ว' }),
         ])]));
         lastCls = cls;
       }
-      rows.push(el('tr', { class: it.row.given ? 'done' : null }, [
-        el('td', { class: 'who' }, [it.who || el('span', { class: 'muted', text: '-' })]),
-        el('td', { class: 'item', text: it.item }),
-        it.key ? el('td', { class: 'order', text: it.key }) : el('td', { class: 'order' }, [el('span', { class: 'manual', text: 'เพิ่มเอง' })]),
-        givenCell(it.row, it.kind) || el('td', { class: 'given' }),
+      rows.push(el('tr', { class: e.state === 'all' ? 'done' : null }, [
+        el('td', { class: 'who' }, [
+          e.who || el('span', { class: 'muted', text: '-' }),
+          e.ship ? el('span', { class: 'ship-tag', text: 'จัดส่ง' }) : null,
+        ]),
+        el('td', { class: 'item' }, [el('ul', { class: 'items' }, e.items.map((it) => el('li', { class: it.kind + (it.row.given ? ' got' : '') }, [
+          el('span', { class: 'dot ' + (it.kind === 'shirt' ? (SWATCH[text(it.row.color)] || 'other') : 'cap'), 'aria-hidden': 'true' }),
+          it.label,
+        ])))]),
+        e.key ? el('td', { class: 'order', text: e.key }) : el('td', { class: 'order' }, [el('span', { class: 'manual', text: 'เพิ่มเอง' })]),
+        orderGivenCell(e),
       ]));
     });
     $('tbody').replaceChildren(...rows);
     const empty = shown.length === 0;
     $('empty').hidden = !empty;
-    if (empty) $('empty-text').textContent = state.q ? 'ไม่พบ "' + state.q + '"' : state.hideGiven && all.length ? 'แจกครบทุกรายการแล้ว' : 'ยังไม่มีรายการ';
+    if (empty) $('empty-text').textContent = state.q ? 'ไม่พบ "' + state.q + '"' : state.hideGiven && all.length ? 'แจกครบทุกออเดอร์แล้ว' : 'ยังไม่มีรายการ';
     $('subtitle').textContent = d.demo ? 'ตัวอย่างข้อมูลสมมติ' : (d.onlyVerified ? 'รายการที่สลิปผ่านแล้ว' : 'ทุกรายการ');
     const updated = toDate(d.updatedAt);
     $('updated').textContent = updated ? 'อัปเดตล่าสุด ' + timeFmt.format(updated) : '';
@@ -568,38 +626,6 @@
   // แก้ชื่อ/เลขหลังเสื้อได้เมื่อแถวมีเลขออเดอร์ (สคริปต์ต้องมี Update.gs ด้วย จึงจะบันทึกลงชีตได้)
   const canEdit = () => state.withOrder && !!state.auth;
   const editKey = (row) => text(row.order);
-  // ช่องติ๊ก "แจกแล้ว" (ของถึงมือคนสั่งแล้ว) บันทึกลงคอลัมน์ "แจกแล้ว" ในชีตผ่าน action: 'update'
-  function givenCell(row, kind) {
-    if (!canEdit()) return null;
-    const key = editKey(row);
-    if (!key) return el('td', { class: 'given' });
-    return el('td', { class: 'given' }, [el('label', { class: 'given-box' + (row.given ? ' on' : '') }, [
-      el('input', { type: 'checkbox', 'data-given': key, 'data-kind': kind, checked: row.given ? '' : null, 'aria-label': 'แจกแล้ว ' + key }),
-      el('span', { text: row.given ? 'แจกแล้ว' : 'ยังไม่แจก' }),
-    ])]);
-  }
-  async function saveGiven(cb) {
-    const kind = cb.dataset.kind;
-    const key = cb.dataset.given;
-    const value = cb.checked;
-    const row = (kind === 'cap' ? state.data.caps : state.data.shirts).find((r) => editKey(r) === key);
-    if (!row) return;
-    cb.disabled = true;
-    try {
-      if (state.auth.mode !== 'demo') {
-        const json = await callApi(authBody({ action: 'update', kind, order: key, given: value }));
-        if (!json.updated) throw new Error('สคริปต์ของชีตยังไม่รองรับช่องแจกแล้ว: อัปเดต Code.gs ตามขั้นตอนใน README ก่อน');
-      }
-      row.given = value;
-      render();
-      toast((value ? 'ติ๊กแจกแล้ว ' : 'เอาติ๊กออก ') + key, 1500);
-    } catch (err) {
-      cb.checked = !value;
-      cb.disabled = false;
-      if (err.auth && err.code === 'session') showLogin(err.message);
-      else toast(err.message || 'บันทึกไม่สำเร็จ');
-    }
-  }
   function shirtRow(row, i) {
     const nameBad = badName(row.name);
     const numberBad = badNumber(row.number);
@@ -890,8 +916,8 @@
     btn.textContent = 'กำลังสร้างไฟล์…';
     try {
       if (!window.XlsxLite) throw new Error('โหลดตัวสร้างไฟล์ Excel ไม่ได้ รีเฟรชหน้าแล้วลองใหม่');
-      const view = currentView();
-      const rows = rowsOf(view, true).filter(matches);
+      const view = CHECKLIST ? { kind: 'checklist', label: 'เช็กลิสต์' } : currentView();
+      const rows = CHECKLIST ? checklistOrders().filter(clMatches).filter((e) => !(state.hideGiven && e.state === 'all')) : rowsOf(view, true).filter(matches);
       let { header, body, widths } = buildExport(view, rows);
       const sheetName = view.label.slice(0, 31);
       // columns the user unticked in "เลือกคอลัมน์"
@@ -906,6 +932,8 @@
       let sheets;
       if (view.kind === 'profit') {
         sheets = profitSheets();
+      } else if (view.kind === 'checklist') {
+        sheets = [{ name: sheetName, rows: [header].concat(body), widths }];
       } else {
         const s = summary(rows, view);
         const sumHead = [view.kind === 'shirt' ? 'Size' : view.kind === 'ship' ? 'สถานะ' : 'รายการ', 'จำนวน'];
@@ -913,7 +941,7 @@
         if (pref.summary) sheets.push({ name: 'สรุป', rows: [sumHead].concat(s.items, [s.total]), widths: [16, 10] });
       }
       const blob = window.XlsxLite.build({ sheets });
-      const range = state.from || state.to ? (state.from || 'เริ่ม') + '_ถึง_' + (state.to || 'ล่าสุด') : 'ทั้งหมด';
+      const range = CHECKLIST ? (state.hideGiven ? 'ยังไม่แจก' : 'ทั้งหมด') : state.from || state.to ? (state.from || 'เริ่ม') + '_ถึง_' + (state.to || 'ล่าสุด') : 'ทั้งหมด';
       const found = state.q ? '-ค้นหา' : '';
       saveFile(blob, 'RCWD-' + sheetName + '-' + range + found + '.xlsx');
     } catch (e) {
@@ -937,7 +965,18 @@
     const oneLine = (v) => text(v).split('\n').map((x) => x.trim()).filter(Boolean).join(' / ');
     const qtyHead = state.withQty ? ['จำนวน (ใบ)'] : [];
     {
-      if (view.kind === 'profit') {
+      if (view.kind === 'checklist') {
+        // หนึ่งแถวต่อคนสั่ง (ออเดอร์) ตามที่เห็นบนหน้าเช็กลิสต์
+        header = ['ลำดับ', 'ชั้น/ห้อง', 'ชื่อคนสั่ง', 'ออเดอร์', 'เสื้อ', 'หมวก', 'ของทั้งหมด', 'เบอร์ติดต่อ', 'จัดส่ง', 'แจกแล้ว'];
+        body = rows.map((e, i) => {
+          const shirts = e.items.filter((it) => it.kind === 'shirt').map((it) => it.label.replace(/^Jersey /, '')).join(' / ');
+          const caps = e.items.filter((it) => it.kind === 'cap').reduce((t, it) => t + qtyOf(it.row), 0);
+          const phone = (e.rows.map((x) => text(x.row.phone)).filter(Boolean)[0]) || '';
+          return [i + 1, e.cls || '', e.who, e.key || 'เพิ่มเอง', shirts, caps ? caps + ' ใบ' : '', e.items.map((it) => it.label).join(' / '), phone,
+            e.ship ? 'จัดส่ง' : '', e.state === 'all' ? 'แจกแล้ว' : e.state === 'some' ? 'แจกบางส่วน' : ''];
+        });
+        widths = [7, 10, 22, 10, 40, 10, 50, 14, 8, 12];
+      } else if (view.kind === 'profit') {
         header = []; body = []; widths = [];
       } else if (view.kind === 'shirt') {
         header = ['ลำดับ', 'Size', 'ชื่อหลังเสื้อ', 'เลขหลังเสื้อ'].concat(orderHead, ['วันที่สั่ง', 'ลิงก์สลิป']);
@@ -996,10 +1035,12 @@
       el('input', { type: 'checkbox', 'data-col': h, checked: pref.off.includes(h) ? null : '' }),
       el('span', { text: h }),
     ]));
-    items.push(el('label', { class: 'col-opt summary-opt' }, [
-      el('input', { type: 'checkbox', 'data-summary': '', checked: pref.summary ? '' : null }),
-      el('span', { text: 'แผ่น "สรุป" (ยอดรวม)' }),
-    ]));
+    if (view.kind !== 'checklist') {
+      items.push(el('label', { class: 'col-opt summary-opt' }, [
+        el('input', { type: 'checkbox', 'data-summary': '', checked: pref.summary ? '' : null }),
+        el('span', { text: 'แผ่น "สรุป" (ยอดรวม)' }),
+      ]));
+    }
     $('columns-list').replaceChildren(...items);
     const n = header.length - pref.off.length;
     $('columns-state').textContent = pref.off.length ? n + ' จาก ' + header.length + ' คอลัมน์' : 'ทุกคอลัมน์';
@@ -1175,8 +1216,8 @@
   on('edit-form', 'submit', (e) => { e.preventDefault(); saveEdit(); });
   on('hide-given', 'change', (e) => { state.hideGiven = e.target.checked; writeUi({ view: state.view, hideGiven: state.hideGiven }); render(); });
   on('tbody', 'change', (e) => {
-    const cb = e.target.closest('[data-given]');
-    if (cb) saveGiven(cb);
+    const cb = e.target.closest('[data-given-order]');
+    if (cb) saveGivenOrder(cb);
   });
 
   document.addEventListener('keydown', (e) => {
@@ -1186,7 +1227,7 @@
   // คอลัมน์ในไฟล์ Excel
   state.exportPrefs = readExportPrefs();
   on('columns-list', 'change', (e) => {
-    const view = currentView();
+    const view = CHECKLIST ? { kind: 'checklist' } : currentView();
     if (!view || view.kind === 'profit') return;
     const pref = exportPref(view.kind);
     const input = e.target;
