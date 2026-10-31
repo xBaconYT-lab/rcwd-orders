@@ -25,7 +25,6 @@
   const UI_KEY = CHECKLIST ? 'rcwd-ui-checklist' : 'rcwd-ui'; // the last category opened (no personal data), so the app reopens where it was
   const PRICING_KEY = 'rcwd-pricing';  // prices and costs used by the profit view (no personal data)
   const EXPORT_KEY = 'rcwd-export';    // which columns to leave out of the Excel file, per category (no personal data)
-  const REFRESH_EVERY_MS = 3 * 60 * 1000; // while the page is open and visible, the numbers follow the sheet
   // ราคาและต้นทุนตาม "บันทึกข้อความ การจัดทำและจัดจำหน่ายของที่ระลึก คณะราชาวดี 2569" (เอกสารแนบ ข้อ 1-2)
   const PRICING_DEFAULTS = {
     shirtPrice: 299, capPrice: 279, pairPrice: 590, shirtCapPrice: 570, fullSetPrice: 849,
@@ -33,7 +32,6 @@
     shipCostPerOrder: 0, otherCost: 0,
   };
   const LEGACY_KEYS = ['rcwd-auth']; // older versions kept the password here
-  const STALE_MS = 5 * 60 * 1000;    // auto-refresh when the tab comes back after this long
   const FETCH_TIMEOUT_MS = 25000;
   const STANDALONE = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
 
@@ -108,16 +106,17 @@
       sessionStorage.removeItem(SESSION_KEY);
       localStorage.removeItem(SESSION_KEY);
       if (v) store().setItem(SESSION_KEY, JSON.stringify(v));
-      else writeCache(null);
     } catch (e) { /* private mode: nothing is kept */ }
   }
-  // Cached data lives and dies with the session (same storage, cleared on logout / expiry) so a reload or a
-  // return to the home-screen app shows the last list at once instead of a spinner while the sheet answers.
+  // The last data pulled stays on the device (sessionStorage in a tab, localStorage in the home-screen app) so a
+  // reload, a page switch or a reopen shows the list at once and the sheet is only asked again on "ดึงข้อมูลล่าสุด".
+  // Dropped on "ออกจากระบบ", on a dead session, and after 12 hours.
   function readCache() {
     try {
       const v = JSON.parse(store().getItem(CACHE_KEY) || 'null');
       if (!v || typeof v !== 'object' || !v.data || typeof v.savedAt !== 'number') return null;
       if (Date.now() - v.savedAt > 12 * 3600 * 1000) return null;
+      v.data.cachedAt = v.savedAt;
       return v.data;
     } catch (e) { return null; }
   }
@@ -489,37 +488,74 @@
   }
   function orderGivenCell(e) {
     if (!canEdit() || !e.key) return el('td', { class: 'given' });
-    const label = e.state === 'all' ? 'แจกแล้ว' : e.state === 'some' ? 'แจกบางส่วน' : 'ยังไม่แจก';
-    const box = el('label', { class: 'given-box' + (e.state === 'all' ? ' on' : e.state === 'some' ? ' some' : '') }, [
+    const label = pendingGiven.has(e.key) ? 'กำลังบันทึก…' : e.state === 'all' ? 'แจกแล้ว' : e.state === 'some' ? 'แจกบางส่วน' : 'ยังไม่แจก';
+    const box = el('label', { class: 'given-box' + (e.state === 'all' ? ' on' : e.state === 'some' ? ' some' : '') + (pendingGiven.has(e.key) ? ' pending' : '') }, [
       el('input', { type: 'checkbox', 'data-given-order': e.key, checked: e.state === 'all' ? '' : null, 'aria-label': 'แจกแล้ว ' + e.key }),
       el('span', { text: label }),
     ]);
     if (e.state === 'some') box.querySelector('input').indeterminate = true;
     return el('td', { class: 'given' }, [box]);
   }
-  async function saveGivenOrder(cb) {
+  // ติ๊กแล้วเห็นผลทันที: จดไว้ในคิว แล้วส่งให้ชีตรวมกันเป็นคำขอเดียวเบื้องหลัง (หลายออเดอร์ = ส่งครั้งเดียว)
+  // ระหว่างรอแถวขึ้น "กำลังบันทึก…" ถ้าชีตตอบไม่ผ่านจะดีดกลับค่าเดิมและบอก ข้อมูลที่ดึงใหม่ระหว่างรอไม่ทับค่าที่ติ๊กไว้
+  const pendingGiven = new Map(); // order key -> { value, before: [{row, given}] }
+  let flushTimer = 0;
+  let flushing = false;
+  function rowsOfOrder(key) {
+    const no = key.slice(1);
+    return state.data.shirts.concat(state.data.caps).filter((r) => orderNo(r) === no);
+  }
+  function applyPending() {
+    pendingGiven.forEach((p, key) => rowsOfOrder(key).forEach((r) => { r.given = p.value; }));
+  }
+  function saveGivenOrder(cb) {
     const key = cb.dataset.givenOrder;
-    const entry = checklistOrders().find((e) => e.key === key);
-    if (!entry) return;
     const value = cb.checked;
-    cb.disabled = true;
-    const todo = entry.rows.filter((x) => editKey(x.row) && !!x.row.given !== value);
+    const rows = rowsOfOrder(key);
+    if (!rows.length) return;
+    const prev = pendingGiven.get(key);
+    pendingGiven.set(key, { value, before: prev ? prev.before : rows.map((r) => ({ row: r, given: !!r.given })) });
+    rows.forEach((r) => { r.given = value; });
+    render();
+    if (state.auth.mode === 'demo') {
+      setTimeout(() => { pendingGiven.delete(key); render(); }, 400);
+      return;
+    }
+    clearTimeout(flushTimer);
+    flushTimer = setTimeout(flushGiven, 350);
+  }
+  async function flushGiven() {
+    if (flushing || !pendingGiven.size || !state.auth) return;
+    flushing = true;
+    const batch = Array.from(pendingGiven.entries()).map(([order, p]) => ({ order, given: p.value }));
     try {
-      for (const x of todo) {
-        if (state.auth.mode !== 'demo') {
-          const json = await callApi(authBody({ action: 'update', kind: x.kind, order: editKey(x.row), given: value }));
-          if (!json.updated) throw new Error('สคริปต์ของชีตยังไม่รองรับช่องแจกแล้ว: อัปเดต Code.gs ตามขั้นตอนใน README ก่อน');
-        }
-        x.row.given = value;
-      }
+      const json = await callApi(authBody({ action: 'update', kind: 'orders', changes: batch }));
+      if (!json.updated) throw new Error('สคริปต์ของชีตยังไม่รองรับการติ๊กหลายออเดอร์: อัปเดต updateFromWeb_ ใน Code.gs ตาม README');
+      batch.forEach((c) => { const p = pendingGiven.get(c.order); if (p && p.value === c.given) pendingGiven.delete(c.order); });
+      writeCache(stripForCache(Object.assign({}, state.data)));
       render();
-      toast((value ? 'ติ๊กแจกแล้ว ' : 'เอาติ๊กออก ') + key + (entry.who ? ' (' + entry.who + ')' : ''), 1500);
+      toast('บันทึกลงชีตแล้ว ' + batch.length + ' ออเดอร์', 1200);
     } catch (err) {
-      render(); // แถวที่บันทึกไปแล้วค้างไว้ตามจริง ที่เหลือแสดงเป็นแจกบางส่วน
+      // ดีดกลับค่าก่อนติ๊ก แล้วบอก (ค่าที่ชีตรับไปแล้วส่วนหนึ่งจะกลับมาเองตอนดึงข้อมูลครั้งถัดไป)
+      batch.forEach((c) => {
+        const p = pendingGiven.get(c.order);
+        if (p && p.value === c.given) { p.before.forEach((b) => { b.row.given = b.given; }); pendingGiven.delete(c.order); }
+      });
+      render();
       if (err.auth && err.code === 'session') showLogin(err.message);
-      else toast(err.message || 'บันทึกไม่สำเร็จ');
+      else toast('บันทึกไม่สำเร็จ: ' + (err.message || '') + ' (ติ๊กถูกดีดกลับ ลองใหม่)', 7000);
+    } finally {
+      flushing = false;
+      if (pendingGiven.size) { clearTimeout(flushTimer); flushTimer = setTimeout(flushGiven, 200); }
     }
   }
+  // ปิดหน้าทั้งที่ยังมีติ๊กค้าง: ส่งทันทีแบบ keepalive
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && pendingGiven.size && !flushing && state.auth && state.auth.mode !== 'demo') {
+      const batch = Array.from(pendingGiven.entries()).map(([order, p]) => ({ order, given: p.value }));
+      try { callApi(authBody({ action: 'update', kind: 'orders', changes: batch }), { keepalive: true }).catch(() => {}); } catch (e) { /* ignore */ }
+    }
+  });
   function renderChecklist() {
     const d = state.data;
     const has = (rows, key) => rows.some((r) => Object.prototype.hasOwnProperty.call(r, key));
@@ -592,8 +628,9 @@
     if (link) $('sheet-link').href = link;
     const note = $('mode-note');
     const oldScript = !!(state.auth && state.auth.mode === 'password');
-    note.hidden = !oldScript;
-    note.textContent = oldScript ? 'สคริปต์รุ่นเก่า: ปิดหน้านี้แล้วต้องเข้าสู่ระบบใหม่' : '';
+    note.hidden = !oldScript && !!state.auth;
+    note.textContent = !state.auth ? 'ข้อมูลที่เคยดึงไว้ · เข้าสู่ระบบเพื่อดึงใหม่หรือแก้ไข' : oldScript ? 'สคริปต์รุ่นเก่า: ปิดหน้านี้แล้วต้องเข้าสู่ระบบใหม่' : '';
+    $('logout').textContent = state.auth ? 'ออกจากระบบ' : 'เข้าสู่ระบบ';
   }
 
   function inRange(row) {
@@ -709,29 +746,23 @@
     if (name.length > 20) { toast('ชื่อหลังเสื้อยาวเกิน 20 ตัวอักษร'); nameInput.focus(); return; }
     if (!/^\d{1,3}$/.test(number)) { toast('เลขหลังเสื้อต้องเป็นตัวเลข 1-3 หลัก'); numberInput.focus(); return; }
     if (name === text(row.name) && number === text(row.number)) { state.editing = null; render(); return; }
-    if (state.busy) return;
-    state.busy = true;
-    const save = $('edit-save');
-    if (save) { save.disabled = true; save.textContent = 'กำลังบันทึก…'; }
+    // แสดงค่าใหม่ทันที ส่งให้ชีตเบื้องหลัง ถ้าไม่ผ่านดีดกลับค่าเดิม
+    const before = { name: row.name, number: row.number };
+    row.name = name; row.number = number;
+    state.editing = null;
+    render();
+    if (state.auth.mode === 'demo') { toast('แก้ไขแล้ว (ตัวอย่าง: ไม่ได้บันทึกจริง)', 2500); return; }
+    toast('กำลังบันทึก ' + key + '…', 1500);
     try {
-      if (state.auth.mode === 'demo') {
-        row.name = name; row.number = number;
-        toast('แก้ไขแล้ว (ตัวอย่าง: ไม่ได้บันทึกจริง)', 2500);
-      } else {
-        const json = await callApi(authBody({ action: 'update', kind: 'shirt', order: key, color: text(row.color), name, number }));
-        if (!json.updated) throw new Error('สคริปต์ของชีตยังไม่รองรับการแก้ไข: เพิ่ม Update.gs ตามขั้นตอนใน README ก่อน');
-        row.name = name; row.number = number;
-        toast('บันทึกลงชีตแล้ว', 2500);
-      }
-      state.editing = null;
-      state.busy = false;
-      render();
-      if (state.auth.mode !== 'demo') await doRefresh({ silent: true });
+      const json = await callApi(authBody({ action: 'update', kind: 'shirt', order: key, color: text(row.color), name, number }));
+      if (!json.updated) throw new Error('สคริปต์ของชีตยังไม่รองรับการแก้ไข: เพิ่ม Update.gs ตามขั้นตอนใน README ก่อน');
+      writeCache(stripForCache(Object.assign({}, state.data)));
+      toast('บันทึกลงชีตแล้ว ' + key, 1500);
     } catch (err) {
-      state.busy = false;
-      if (save) { save.disabled = false; save.textContent = 'บันทึก'; }
+      row.name = before.name; row.number = before.number;
+      render();
       if (err.auth && err.code === 'session') showLogin(err.message);
-      else toast(err.message || 'บันทึกไม่สำเร็จ');
+      else toast('บันทึกไม่สำเร็จ: ' + (err.message || '') + ' (ค่าถูกดีดกลับ)', 7000);
     }
   }
 
@@ -914,8 +945,9 @@
     if (link) $('sheet-link').href = link;
     const note = $('mode-note');
     const oldScript = !!(state.auth && state.auth.mode === 'password');
-    note.hidden = !oldScript;
-    note.textContent = oldScript ? 'สคริปต์รุ่นเก่า: ปิดหน้านี้แล้วต้องเข้าสู่ระบบใหม่' : '';
+    note.hidden = !oldScript && !!state.auth;
+    note.textContent = !state.auth ? 'ข้อมูลที่เคยดึงไว้ · เข้าสู่ระบบเพื่อดึงใหม่หรือแก้ไข' : oldScript ? 'สคริปต์รุ่นเก่า: ปิดหน้านี้แล้วต้องเข้าสู่ระบบใหม่' : '';
+    $('logout').textContent = state.auth ? 'ออกจากระบบ' : 'เข้าสู่ระบบ';
   }
 
   // ---------- Excel (xlsx-lite.js, no download from a CDN) ----------
@@ -1069,21 +1101,21 @@
   function adopt(json, auth) {
     state.data = normalize(json);
     state.loadedAt = Date.now();
+    if (CHECKLIST) applyPending();
     if (DEMO) {
       state.auth = { mode: 'demo' };
     } else if (typeof json.token === 'string' && json.token) {
       // สคริปต์รุ่นใหม่: เก็บโทเค็นแทนรหัสผ่าน
       state.auth = { mode: 'token', username: auth.username, token: json.token, expiresAt: text(json.expiresAt) };
       writeSession({ username: auth.username, token: json.token, expiresAt: state.auth.expiresAt });
-      writeCache(stripForCache(json));
     } else if (auth.mode === 'token') {
       state.auth = auth; // refresh answered without a token: keep the one we have
-      writeCache(stripForCache(json));
     } else {
       // สคริปต์รุ่นเก่า: รหัสผ่านอยู่แค่ในหน่วยความจำของหน้านี้ ไม่ถูกเก็บลงเครื่อง
       state.auth = { mode: 'password', username: auth.username, password: auth.password };
       writeSession(null);
     }
+    if (!DEMO) writeCache(stripForCache(json));
     show('app');
     render();
   }
@@ -1124,6 +1156,7 @@
   function showLogin(message, opts) {
     const o = opts || {};
     if (o.forget !== false) { writeSession(null); state.auth = null; }
+    if (o.dropCache) writeCache(null);
     clearScreen();
     $('login-error').textContent = message || '';
     $('setup-note').hidden = !o.setup && !!API_URL;
@@ -1132,6 +1165,7 @@
 
   async function logout() {
     const a = state.auth;
+    writeCache(null);
     showLogin('');
     if (a && a.mode === 'token' && API_URL) {
       try { await callApi({ action: 'logout', token: a.token }, { keepalive: true }); } catch (e) { /* the token expires on its own */ }
@@ -1200,16 +1234,11 @@
     pass.focus();
   });
 
-  on('logout', 'click', logout);
-  on('refresh', 'click', () => doRefresh());
-  on('refresh-top', 'click', () => doRefresh());
+  on('logout', 'click', () => (state.auth ? logout() : showLogin('', { forget: false })));
+  on('refresh', 'click', () => (state.auth ? doRefresh() : showLogin('เข้าสู่ระบบเพื่อดึงข้อมูลใหม่', { forget: false })));
+  on('refresh-top', 'click', () => (state.auth ? doRefresh() : showLogin('เข้าสู่ระบบเพื่อดึงข้อมูลใหม่', { forget: false })));
 
-  // กลับมาที่แท็บ/แอปหลังจากห่างไปสักพัก: ดึงข้อมูลใหม่ให้เงียบ ๆ
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible' || !state.data || !state.auth || state.busy) return;
-    if (Date.now() - state.loadedAt < STALE_MS) return;
-    doRefresh({ silent: true });
-  });
+  // ไม่มีการดึงข้อมูลเอง: ข้อมูลที่ดึงมาแล้วอยู่ในเครื่องจนกว่าจะกด "ดึงข้อมูลล่าสุด" (ชีตตอบช้า จึงไม่ดึงซ้ำโดยไม่ได้ขอ)
 
   // ---------- controls ----------
   on('switch', 'click', (e) => {
@@ -1294,13 +1323,6 @@
     toast('ใช้ราคาและต้นทุนตามเอกสารแล้ว', 2500);
   });
 
-  // ตัวเลขตามชีตแบบ "สด": ดึงใหม่ทุก 3 นาทีขณะที่หน้าเปิดอยู่และมองเห็น
-  setInterval(() => {
-    if (document.visibilityState !== 'visible' || !state.data || !state.auth || state.busy) return;
-    if (state.auth.mode === 'demo') return;
-    if (Date.now() - state.loadedAt < REFRESH_EVERY_MS) return;
-    doRefresh({ silent: true });
-  }, 30 * 1000);
 
   // ช่วงวันที่: พับไว้บนมือถือ กางเสมอบนจอกว้าง
   const wide = window.matchMedia('(min-width: 860px)');
@@ -1318,29 +1340,23 @@
       return;
     }
     const saved = readSession();
-    if (!saved) return showLogin('', { setup: !API_URL });
-    if (saved.expiresAt && Date.parse(saved.expiresAt) < Date.now()) return showLogin('เซสชันหมดอายุ เข้าสู่ระบบอีกครั้ง');
-    state.auth = { mode: 'token', username: saved.username, token: saved.token, expiresAt: text(saved.expiresAt) };
-    const cached = readCache();
+    const cached = API_URL ? readCache() : null;
+    if (saved && saved.expiresAt && Date.parse(saved.expiresAt) < Date.now()) return showLogin('เซสชันหมดอายุ เข้าสู่ระบบอีกครั้ง', { dropCache: true });
+    if (saved) state.auth = { mode: 'token', username: saved.username, token: saved.token, expiresAt: text(saved.expiresAt) };
     if (cached) {
-      // show the last list now, pull the fresh one behind it
+      // ข้อมูลชุดล่าสุดที่เคยดึงไว้แสดงทันที ไม่ดึงใหม่จนกว่าจะกดเอง (ไม่มีโทเค็น = ดูได้อย่างเดียวจนกว่าจะเข้าสู่ระบบ)
       state.data = normalize(cached);
-      state.loadedAt = 0;
+      state.loadedAt = cached.cachedAt || 0;
       show('app');
       render();
-      try {
-        await refreshData();
-      } catch (err) {
-        if (err.auth || err.setup) showLogin(err.message, { setup: !!err.setup, forget: true });
-        else toast('แสดงข้อมูลล่าสุดที่เคยดึงไว้: ' + err.message);
-      }
       return;
     }
+    if (!saved) return showLogin('', { setup: !API_URL });
     try {
       await refreshData();
     } catch (err) {
       // a network hiccup keeps the session for the next try; a dead session is forgotten
-      showLogin(err.message, { setup: !!err.setup, forget: !!(err.auth || err.setup) });
+      showLogin(err.message, { setup: !!err.setup, forget: !!(err.auth || err.setup), dropCache: !!(err.auth || err.setup) });
     }
   })();
 })();

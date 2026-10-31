@@ -116,6 +116,20 @@ test('ticking แจกแล้ว writes TRUE into that column of the cap row 
   assert.equal(U.handle({ kind: 'shirt', order: '#9-1', given: true }).ok, false, 'shirt tab without a แจกแล้ว column is reported');
 });
 
+test('one batched call ticks every row of each order across the shirt and cap tabs', () => {
+  sheets['Jersey ขาว'].data[0].push('แจกแล้ว'); sheets['Jersey ขาว'].data[1].push(false);
+  sheets['Jersey เขียว'].data[0].push('แจกแล้ว'); sheets['Jersey เขียว'].data[1].push(false); sheets['Jersey เขียว'].data[2].push(false);
+  sheets['หมวก RCWD'].data.push([2, 'ตัวอย่าง เก้า', 'ม.1', '5', 'RCWD Jersey + หมวก', 1, '#9', false]);
+  const r = U.handle({ kind: 'orders', changes: [{ order: '#9', given: true }, { order: '#21', given: true }] }, 'staff');
+  assert.equal(JSON.stringify(r), JSON.stringify({ ok: true, updated: true, changed: 4 }), JSON.stringify(r));
+  assert.equal(sheets['Jersey ขาว'].data[1][6], true, '#9-1 ticked');
+  assert.equal(sheets['Jersey เขียว'].data[2][6], true, '#9-2 ticked');
+  assert.equal(sheets['Jersey เขียว'].data[1][6], false, '#2-1 untouched');
+  assert.equal(sheets['หมวก RCWD'].data[2][7], true, 'cap #9 ticked');
+  assert.equal(sheets['หมวก RCWD'].data[1][7], true, 'cap #21 ticked');
+  assert.equal(U.handle({ kind: 'orders', changes: [{ order: '#9-1', given: true }] }).ok, false, 'needs the bare order number');
+});
+
 test('a busy sheet asks to retry', () => {
   locked = true;
   const r = U.handle({ kind: 'shirt', order: '#9-1', name: 'X', number: '1' });

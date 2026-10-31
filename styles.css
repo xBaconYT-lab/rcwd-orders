@@ -245,6 +245,8 @@ table.checklist .dot.cap { border-radius: 3px; background: var(--ink); border-co
 table.checklist .dot.other { background: var(--line); }
 .ship-tag { display: inline-block; margin-left: 8px; padding: 1px 8px; font-size: 0.75rem; font-weight: 500; color: var(--muted); border: 1px dashed var(--line); border-radius: 999px; }
 .given-box.some { border-style: dashed; color: var(--ink); }
+.given-box.pending { opacity: 0.75; }
+.given-box.pending span { font-style: normal; color: var(--muted); }
 /* เลือกคอลัมน์ที่จะลงไฟล์ Excel */
 .columns { grid-column: 1 / -1; }
 .columns > summary {
