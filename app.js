@@ -18,6 +18,7 @@
   }
 
   const API_URL = String(window.RCWD_API_URL || '').trim();
+  const MAILER_URL = String(window.RCWD_MAILER_URL || '').trim(); // mailer/ Worker: sends through Gmail SMTP, '' = Apps Script sends
   const DEMO = new URLSearchParams(location.search).has('demo');
   const SESSION_KEY = 'rcwd-session';
   const CACHE_KEY = 'rcwd-cache';      // the last data pulled, next to the session: the page opens instantly and refreshes behind
@@ -183,7 +184,7 @@
     try {
       // A plain string body with no custom header is a "simple" request: Apps Script answers through a
       // redirect to script.googleusercontent.com and never has to handle a CORS preflight.
-      res = await fetch(API_URL, {
+      res = await fetch((opts && opts.url) || API_URL, {
         method: 'POST', body: JSON.stringify(body), signal: ctl.signal,
         credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer', keepalive: !!(opts && opts.keepalive),
       });
@@ -596,14 +597,15 @@
     const all = key === 'all';
     const resend = !all && d.emailed.includes(key);
     const left = all ? checklistOrders().filter((e) => e.key && !d.emailed.includes(e.key)).length : 0;
-    const ask = all ? 'ส่งอีเมลสรุปออเดอร์ให้ลูกค้า ' + left + ' ออเดอร์ที่ยังไม่ได้ส่ง?\n(ส่งจาก Gmail ของชีต ส่งแล้วยกเลิกไม่ได้)'
+    const ask = all ? 'ส่งอีเมลสรุปออเดอร์ให้ลูกค้า ' + left + ' ออเดอร์ที่ยังไม่ได้ส่ง?\n(ส่งแล้วยกเลิกไม่ได้)'
       : resend ? 'ออเดอร์ ' + key + ' ส่งอีเมลไปแล้ว ส่งซ้ำอีกครั้ง?' : 'ส่งอีเมลสรุปออเดอร์ ' + key + ' ให้ลูกค้า?';
     if (!window.confirm(ask)) return;
     if (state.auth.mode === 'demo') { toast('ตัวอย่าง: ไม่ได้ส่งอีเมลจริง', 2500); return; }
     emailBusy.add(key);
     render();
     try {
-      const json = await callApi(authBody(all ? { action: 'email', all: true } : { action: 'email', order: key, resend }), { timeoutMs: 150000 });
+      const json = MAILER_URL ? await sendViaMailer(all, key, resend)
+        : await callApi(authBody(all ? { action: 'email', all: true } : { action: 'email', order: key, resend }), { timeoutMs: 150000 });
       if (Array.isArray(json.emailed)) state.data.emailed = json.emailed.map(text); // state.data: a background pull may have replaced d
       writeCache(stripForCache(Object.assign({}, state.data)));
       if (!all) toast('ส่งอีเมลแล้ว ' + key, 2500);
@@ -620,6 +622,23 @@
     } finally {
       emailBusy.delete(key);
       render();
+    }
+  }
+  // ผ่าน Worker: ทีละชุด 10 ฉบับ ส่งทั้งหมดวนจนไม่เหลือ (หยุดถ้าชุดไหนส่งไม่ได้สักฉบับ กันวนไม่จบ)
+  async function sendViaMailer(all, key, resend) {
+    const call = (body) => callApi(authBody(body), { url: MAILER_URL, timeoutMs: 150000 });
+    if (!all) return call({ action: 'send', order: key, resend });
+    const total = { sent: 0, failed: 0, noEmail: 0, left: 0, emailed: null };
+    for (;;) {
+      const r = await call({ action: 'send', all: true });
+      total.sent += r.sent || 0;
+      total.failed += r.failed || 0;
+      total.noEmail = r.noEmail || 0;
+      total.left = r.left || 0;
+      if (Array.isArray(r.emailed)) { total.emailed = r.emailed; state.data.emailed = r.emailed.map(text); }
+      const btn = $('email-all');
+      if (btn) btn.textContent = 'กำลังส่งอีเมล… ส่งแล้ว ' + total.sent + ' ฉบับ';
+      if (!total.left || !r.sent) return total;
     }
   }
   function renderChecklist() {
@@ -1364,14 +1383,15 @@
   on('empty-reset', 'click', clearDates);
   on('export', 'click', exportExcel);
   // ตั้งค่าอีเมล (เก็บใน Script Properties ของชีต) และส่งอีเมลทดสอบจากของที่เลือกเอง
-  async function emailCall(body, btn, busyText) {
+  async function emailCall(body, btn, busyText, url) {
     if (!state.auth) { needLogin('เข้าสู่ระบบก่อนตั้งค่าอีเมล'); return null; }
     if (state.auth.mode === 'demo') { toast('ตัวอย่าง: ไม่ได้ส่งหรือบันทึกจริง', 2500); return null; }
     const label = btn.textContent;
     btn.disabled = true;
     btn.textContent = busyText;
     try {
-      return await callApi(authBody(Object.assign({ action: 'email' }, body)), { timeoutMs: 60000 });
+      return url ? await callApi(authBody(body), { url, timeoutMs: 90000 })
+        : await callApi(authBody(Object.assign({ action: 'email' }, body)), { timeoutMs: 60000 });
     } catch (err) {
       if (err.auth && err.code === 'session') showLogin(err.message);
       else toast('ไม่สำเร็จ: ' + (err.message || ''), 8000);
@@ -1388,18 +1408,39 @@
     const to = document.querySelector('#email-test-form [name="to"]');
     if (to && !to.value && json.sender) to.value = json.sender;
   }
+  function fillMailer(json) {
+    if (!json) return;
+    $('mailer-gmail').value = text(json.gmail);
+    $('mailer-pass').value = '';
+    $('mailer-pass').placeholder = json.hasPassword ? 'ตั้งไว้แล้ว (เว้นว่าง = ใช้รหัสเดิม)' : 'ยังไม่ได้ตั้ง';
+    if (json.gmail) $('email-state').textContent = 'ส่งจาก ' + json.gmail + (json.hasPassword ? '' : ' · ยังไม่มี app password');
+  }
+  if (MAILER_URL && $('mailer-fields')) {
+    $('mailer-fields').hidden = false;
+    const alias = document.querySelector('#email-settings-form [data-setting="from"]');
+    if (alias) alias.closest('label').hidden = true; // SMTP sends as the Gmail above
+  }
   let emailSettingsLoaded = false;
   on('email-panel', 'toggle', async (e) => {
     if (!e.target.open || emailSettingsLoaded) return;
     const json = await emailCall({ settings: 'get' }, $('email-settings-save'), 'กำลังโหลด…');
     if (json) { emailSettingsLoaded = true; fillEmailSettings(json); }
+    if (json && MAILER_URL) fillMailer(await emailCall({ action: 'settings' }, $('email-settings-save'), 'กำลังโหลด…', MAILER_URL));
   });
   on('email-settings-form', 'submit', async (e) => {
     e.preventDefault();
     const settings = {};
     document.querySelectorAll('#email-settings-form [data-setting]').forEach((input) => { settings[input.dataset.setting] = input.value.trim(); });
     const json = await emailCall({ settings }, $('email-settings-save'), 'กำลังบันทึก…');
-    if (json) { fillEmailSettings(json); toast('บันทึกการตั้งค่าอีเมลแล้ว', 2500); }
+    if (!json) return;
+    fillEmailSettings(json);
+    if (MAILER_URL) {
+      const pass = $('mailer-pass').value.replace(/\s+/g, '');
+      const m = await emailCall({ action: 'settings', gmail: $('mailer-gmail').value.trim(), appPassword: pass }, $('email-settings-save'), pass ? 'กำลังลองเข้า Gmail…' : 'กำลังบันทึก…', MAILER_URL);
+      if (!m) return;
+      fillMailer(m);
+    }
+    toast('บันทึกการตั้งค่าอีเมลแล้ว', 2500);
   });
   on('email-test-form', 'submit', async (e) => {
     e.preventDefault();
@@ -1410,7 +1451,8 @@
       shirts: [shirt(1), shirt(2)].filter(Boolean), caps: Number(f.caps.value) || 0, ship: f.ship.value === '1', address: f.address.value.trim(),
     };
     if (!test.shirts.length && !test.caps) { toast('เลือกเสื้อหรือหมวกอย่างน้อย 1 อย่าง'); return; }
-    const json = await emailCall({ test }, $('email-test-send'), 'กำลังส่ง…');
+    const json = MAILER_URL ? await emailCall({ action: 'test', test }, $('email-test-send'), 'กำลังส่ง…', MAILER_URL)
+      : await emailCall({ test }, $('email-test-send'), 'กำลังส่ง…');
     if (json) toast('ส่งอีเมลทดสอบไปที่ ' + text(json.to) + ' แล้ว เช็กกล่องจดหมาย (และโฟลเดอร์สแปม)', 6000);
   });
   on('email-all', 'click', () => (state.auth ? sendEmail('all') : needLogin('เข้าสู่ระบบก่อนส่งอีเมล')));

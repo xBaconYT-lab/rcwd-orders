@@ -8,7 +8,7 @@
      answers through a redirect to script.googleusercontent.com).
      form-action 'none' means the login form can never be submitted as a plain
      GET with the password in the address bar if a script fails to load. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src https://script.google.com https://script.googleusercontent.com; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src https://script.google.com https://script.googleusercontent.com https://rcwd-mailer.weeraphat-work-th.workers.dev; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex, nofollow">
@@ -27,10 +27,10 @@
 <link rel="preload" href="fonts/prompt-400-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/teko-600-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="fonts/fonts.css">
-<link rel="stylesheet" href="styles.css?v=e11f356">
+<link rel="stylesheet" href="styles.css?v=bec87ed">
 <script src="config.js"></script>
-<script src="xlsx-lite.js?v=e11f356" defer></script>
-<script src="app.js?v=e11f356" defer></script>
+<script src="xlsx-lite.js?v=bec87ed" defer></script>
+<script src="app.js?v=bec87ed" defer></script>
 </head>
 <body data-page="checklist">
 
@@ -103,6 +103,11 @@
       <span class="more-state" id="email-state">ส่งจาก Gmail ของชีต</span>
     </summary>
     <form class="pricing-form" id="email-settings-form">
+      <fieldset id="mailer-fields" hidden>
+        <legend>Gmail ที่ใช้ส่ง</legend>
+        <label class="field"><span>Gmail</span><input type="email" id="mailer-gmail" maxlength="120" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="rcwd.official@gmail.com"></label>
+        <label class="field"><span>App password (16 ตัว)</span><input type="password" id="mailer-pass" maxlength="24" autocomplete="new-password" autocapitalize="off" spellcheck="false" placeholder="ยังไม่ได้ตั้ง"></label>
+      </fieldset>
       <fieldset>
         <legend>ผู้ส่ง</legend>
         <label class="field"><span>ชื่อผู้ส่ง</span><input type="text" data-setting="fromName" maxlength="60" autocomplete="off"></label>
@@ -115,7 +120,7 @@
         <label class="field"><span>การจัดส่ง</span><textarea data-setting="shipText" maxlength="400" rows="2"></textarea></label>
         <label class="field"><span>ช่องทางติดต่อ</span><input type="text" data-setting="contactLine" maxlength="200" autocomplete="off"></label>
       </fieldset>
-      <p class="pricing-note" id="email-sender-note">ไม่ต้องใช้ App Password: สคริปต์ส่งจาก Gmail ของเจ้าของชีตเอง "ส่งในนาม" ต้องตั้งใน Gmail &gt; การตั้งค่า &gt; บัญชี ก่อน</p>
+      <p class="pricing-note" id="email-sender-note">App password สร้างที่ myaccount.google.com/apppasswords (ต้องเปิดการยืนยัน 2 ขั้นตอน) รหัสถูกเก็บในเซิร์ฟเวอร์ส่งอีเมล ไม่แสดงกลับมาและไม่อยู่ในเครื่องนี้ เว้นว่าง = ใช้รหัสเดิม</p>
       <button class="btn primary" type="submit" id="email-settings-save">บันทึกการตั้งค่า</button>
     </form>
     <form class="pricing-form email-test" id="email-test-form">

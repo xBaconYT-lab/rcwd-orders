@@ -1,0 +1,14 @@
+# Cloudflare Worker ที่ส่งอีเมลสรุปออเดอร์ผ่าน Gmail SMTP แทน Apps Script
+# Gmail + app password ตั้งจากหน้าเช็กลิสต์ (เก็บใน KV ไม่อยู่ในโค้ดหรือ GitHub)
+name = "rcwd-mailer"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwsher6qjJtSS2A2EFbpej-gHYczgew1M4ZSfny7EzjK6lCz6-ubb3cqVz30xwFdeUpLg/exec"
+ALLOWED_ORIGINS = "https://rcwd.leamm.com"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "0f3e742932bc4a84bdf2ff3404d1f8b9"
