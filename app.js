@@ -109,7 +109,7 @@
     } catch (e) { /* private mode: nothing is kept */ }
   }
   // The last data pulled stays on the device (sessionStorage in a tab, localStorage in the home-screen app) so a
-  // reload, a page switch or a reopen shows the list at once and the sheet is only asked again on "ดึงข้อมูลล่าสุด".
+  // reload, a page switch or a reopen shows the list at once while the sheet is asked again behind it (see autoSync).
   // Dropped on "ออกจากระบบ", on a dead session, and after 12 hours.
   function readCache() {
     try {
@@ -746,6 +746,7 @@
     if (a && a.mode === 'password') return Object.assign({ username: a.username, password: a.password }, body);
     return body;
   }
+  let editsInFlight = 0;
   function findShirt(key) {
     return state.data ? state.data.shirts.find((r) => editKey(r) === key) : null;
   }
@@ -768,6 +769,7 @@
     render();
     if (state.auth.mode === 'demo') { toast('แก้ไขแล้ว (ตัวอย่าง: ไม่ได้บันทึกจริง)', 2500); return; }
     toast('กำลังบันทึก ' + key + '…', 1500);
+    editsInFlight++;
     try {
       const json = await callApi(authBody({ action: 'update', kind: 'shirt', order: key, color: text(row.color), name, number }));
       if (!json.updated) throw new Error('สคริปต์ของชีตยังไม่รองรับการแก้ไข: เพิ่ม Update.gs ตามขั้นตอนใน README ก่อน');
@@ -778,6 +780,8 @@
       render();
       if (err.auth && err.code === 'session') showLogin(err.message);
       else toast('บันทึกไม่สำเร็จ: ' + (err.message || '') + ' (ค่าถูกดีดกลับ)', 7000);
+    } finally {
+      editsInFlight--;
     }
   }
 
@@ -1133,7 +1137,7 @@
     }
     if (!DEMO) writeCache(stripForCache(json));
     show('app');
-    render();
+    if (!state.editing) render(); // a background pull must not wipe what is being typed; closing the editor renders
   }
 
   // what is cached: the data only, never the token or anything about the sign-in
@@ -1201,7 +1205,7 @@
       if (!o.silent) toast('อัปเดตข้อมูลแล้ว', 1800);
     } catch (err) {
       if (err.auth && (err.code === 'session' || state.auth.mode !== 'token')) showLogin(err.message);
-      else toast(err.message);
+      else if (!o.silent) toast(err.message);
     } finally {
       state.busy = false;
       buttons.forEach((b, i) => { b.disabled = false; b.textContent = labels[i]; });
@@ -1254,7 +1258,18 @@
   on('refresh', 'click', () => (state.auth ? doRefresh() : showLogin('เข้าสู่ระบบเพื่อดึงข้อมูลใหม่', { forget: false })));
   on('refresh-top', 'click', () => (state.auth ? doRefresh() : showLogin('เข้าสู่ระบบเพื่อดึงข้อมูลใหม่', { forget: false })));
 
-  // ไม่มีการดึงข้อมูลเอง: ข้อมูลที่ดึงมาแล้วอยู่ในเครื่องจนกว่าจะกด "ดึงข้อมูลล่าสุด" (ชีตตอบช้า จึงไม่ดึงซ้ำโดยไม่ได้ขอ)
+  // ดึงข้อมูลเองเบื้องหลัง: ทุก 30 วินาทีขณะเปิดหน้าอยู่ และทันทีที่กลับมาที่หน้านี้ ติ๊ก/แก้ไขจากเครื่องอื่นจึงขึ้นเองโดยไม่ต้องกด
+  // ข้ามรอบถ้ากำลังแก้ชื่อ/เลข หรือยังมีค่าที่รอบันทึก เพื่อไม่ให้ข้อมูลเก่าจากชีตทับสิ่งที่เพิ่งทำ
+  const SYNC_MS = 30000;
+  function autoSync() {
+    if (!state.auth || state.auth.mode === 'demo' || !state.data || document.visibilityState !== 'visible') return;
+    if (state.busy || state.editing || editsInFlight || flushing || pendingGiven.size) return;
+    if (Date.now() - state.loadedAt < 10000) return;
+    doRefresh({ silent: true });
+  }
+  setInterval(autoSync, SYNC_MS);
+  document.addEventListener('visibilitychange', autoSync);
+  window.addEventListener('focus', autoSync);
 
   // ---------- controls ----------
   on('switch', 'click', (e) => {
@@ -1363,11 +1378,12 @@
     if (saved && saved.expiresAt && Date.parse(saved.expiresAt) < Date.now()) return showLogin('เซสชันหมดอายุ เข้าสู่ระบบอีกครั้ง', { dropCache: true });
     if (saved) state.auth = { mode: 'token', username: saved.username, token: saved.token, expiresAt: text(saved.expiresAt) };
     if (cached) {
-      // ข้อมูลชุดล่าสุดที่เคยดึงไว้แสดงทันที ไม่ดึงใหม่จนกว่าจะกดเอง (ไม่มีโทเค็น = ดูได้อย่างเดียวจนกว่าจะเข้าสู่ระบบ)
+      // ข้อมูลชุดล่าสุดที่เคยดึงไว้แสดงทันที แล้วดึงใหม่เบื้องหลัง (ไม่มีโทเค็น = ดูได้อย่างเดียวจนกว่าจะเข้าสู่ระบบ)
       state.data = normalize(cached);
       state.loadedAt = cached.cachedAt || 0;
       show('app');
       render();
+      autoSync();
       return;
     }
     if (!saved) return showLogin('', { setup: !API_URL });
