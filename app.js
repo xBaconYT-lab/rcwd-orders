@@ -20,6 +20,7 @@
   const API_URL = String(window.RCWD_API_URL || '').trim();
   const DEMO = new URLSearchParams(location.search).has('demo');
   const SESSION_KEY = 'rcwd-session';
+  const CACHE_KEY = 'rcwd-cache';      // the last data pulled, next to the session: the page opens instantly and refreshes behind
   const CHECKLIST = document.body.dataset.page === 'checklist'; // checklist.html: the same app, a different screen
   const UI_KEY = CHECKLIST ? 'rcwd-ui-checklist' : 'rcwd-ui'; // the last category opened (no personal data), so the app reopens where it was
   const PRICING_KEY = 'rcwd-pricing';  // prices and costs used by the profit view (no personal data)
@@ -107,7 +108,25 @@
       sessionStorage.removeItem(SESSION_KEY);
       localStorage.removeItem(SESSION_KEY);
       if (v) store().setItem(SESSION_KEY, JSON.stringify(v));
+      else writeCache(null);
     } catch (e) { /* private mode: nothing is kept */ }
+  }
+  // Cached data lives and dies with the session (same storage, cleared on logout / expiry) so a reload or a
+  // return to the home-screen app shows the last list at once instead of a spinner while the sheet answers.
+  function readCache() {
+    try {
+      const v = JSON.parse(store().getItem(CACHE_KEY) || 'null');
+      if (!v || typeof v !== 'object' || !v.data || typeof v.savedAt !== 'number') return null;
+      if (Date.now() - v.savedAt > 12 * 3600 * 1000) return null;
+      return v.data;
+    } catch (e) { return null; }
+  }
+  function writeCache(json) {
+    try {
+      sessionStorage.removeItem(CACHE_KEY);
+      localStorage.removeItem(CACHE_KEY);
+      if (json) store().setItem(CACHE_KEY, JSON.stringify({ savedAt: Date.now(), data: json }));
+    } catch (e) { /* storage full or private mode: the next load just waits for the sheet */ }
   }
   function readUi() {
     try {
@@ -1056,8 +1075,10 @@
       // สคริปต์รุ่นใหม่: เก็บโทเค็นแทนรหัสผ่าน
       state.auth = { mode: 'token', username: auth.username, token: json.token, expiresAt: text(json.expiresAt) };
       writeSession({ username: auth.username, token: json.token, expiresAt: state.auth.expiresAt });
+      writeCache(stripForCache(json));
     } else if (auth.mode === 'token') {
       state.auth = auth; // refresh answered without a token: keep the one we have
+      writeCache(stripForCache(json));
     } else {
       // สคริปต์รุ่นเก่า: รหัสผ่านอยู่แค่ในหน่วยความจำของหน้านี้ ไม่ถูกเก็บลงเครื่อง
       state.auth = { mode: 'password', username: auth.username, password: auth.password };
@@ -1065,6 +1086,15 @@
     }
     show('app');
     render();
+  }
+
+  // what is cached: the data only, never the token or anything about the sign-in
+  function stripForCache(json) {
+    const out = {};
+    for (const k of ['updatedAt', 'sheetUrl', 'onlyVerified', 'sizes', 'colors', 'capLabel', 'shipLabel', 'shirts', 'caps', 'shipping']) {
+      if (json[k] !== undefined) out[k] = json[k];
+    }
+    return out;
   }
 
   async function signIn(username, password) {
@@ -1291,6 +1321,21 @@
     if (!saved) return showLogin('', { setup: !API_URL });
     if (saved.expiresAt && Date.parse(saved.expiresAt) < Date.now()) return showLogin('เซสชันหมดอายุ เข้าสู่ระบบอีกครั้ง');
     state.auth = { mode: 'token', username: saved.username, token: saved.token, expiresAt: text(saved.expiresAt) };
+    const cached = readCache();
+    if (cached) {
+      // show the last list now, pull the fresh one behind it
+      state.data = normalize(cached);
+      state.loadedAt = 0;
+      show('app');
+      render();
+      try {
+        await refreshData();
+      } catch (err) {
+        if (err.auth || err.setup) showLogin(err.message, { setup: !!err.setup, forget: true });
+        else toast('แสดงข้อมูลล่าสุดที่เคยดึงไว้: ' + err.message);
+      }
+      return;
+    }
     try {
       await refreshData();
     } catch (err) {
