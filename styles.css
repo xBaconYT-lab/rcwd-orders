@@ -215,6 +215,13 @@ input[type="search"]::-webkit-search-results-button { -webkit-appearance: none; 
   width: 100%; min-height: 44px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px;
   background: var(--surface); color: var(--ink);
 }
+/* ดูอย่างเดียว (ยังไม่ได้เข้าสู่ระบบ) */
+.readonly-bar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px;
+  margin: 0 0 12px; padding: 10px 14px; border: 1px dashed var(--accent); border-radius: var(--radius); background: var(--accent-soft);
+  color: var(--ink); font-size: 0.9375rem;
+}
+.readonly-bar .btn { white-space: normal; }
 /* ช่องติ๊ก "แจกแล้ว" */
 .given-box {
   display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px 0 8px;
