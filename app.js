@@ -288,7 +288,26 @@
       : view.kind === 'ship' ? (state.data.shipping || [])
       : view.kind === 'profit' ? state.data.shirts.concat(state.data.caps)
       : state.data.shirts.filter((r) => view.color === null || text(r.color) === view.color);
-    return onlyInRange ? base.filter(inRange) : base;
+    if (!onlyInRange) return base;
+    const inside = base.filter(inRange);
+    return view.kind === 'profit' ? inside : byOrderNo(inside);
+  }
+  // หน้าออเดอร์เรียงตามเลขออเดอร์ (#1-1, #2-1, #2-2, #3 …) แถวที่พิมพ์เพิ่มเอง (ไม่มีเลข) ไปท้ายสุดตามลำดับในชีต
+  const orderParts = (row) => { const m = /^#(\d+)(?:-(\d+))?/.exec(text(row.order)); return m ? [Number(m[1]), Number(m[2] || 0)] : null; };
+  function byOrderNo(rows) {
+    return rows.map((r, i) => ({ r, i })).sort((a, b) => {
+      const ka = orderParts(a.r), kb = orderParts(b.r);
+      if (ka && kb) return ka[0] - kb[0] || ka[1] - kb[1] || a.i - b.i;
+      if (ka) return -1;
+      if (kb) return 1;
+      return a.i - b.i;
+    }).map((x) => x.r);
+  }
+  // ไฟล์ Excel ของเสื้อเรียงตามไซซ์ (S, M, L, XL, 2XL, 3XL …) ในไซซ์เดียวกันเรียงตามเลขออเดอร์
+  function bySize(rows) {
+    const order = state.data.sizes.map((x) => text(x).trim().toUpperCase());
+    const rank = (r) => { const i = order.indexOf(text(r.size).trim().toUpperCase()); return i === -1 ? 999 : i; };
+    return rows.map((r, i) => ({ r, i })).sort((a, b) => rank(a.r) - rank(b.r) || a.i - b.i).map((x) => x.r);
   }
 
   // ---------- เรียงลำดับ ----------
@@ -1047,7 +1066,7 @@
         header = []; body = []; widths = [];
       } else if (view.kind === 'shirt') {
         header = ['ลำดับ', 'Size', 'ชื่อหลังเสื้อ', 'เลขหลังเสื้อ'].concat(orderHead, ['วันที่สั่ง', 'ลิงก์สลิป']);
-        body = rows.map((r, i) => [i + 1, text(r.size), text(r.name), text(r.number)].concat(order(r), [when(r), safeLink(r.slip)]));
+        body = bySize(rows).map((r, i) => [i + 1, text(r.size), text(r.name), text(r.number)].concat(order(r), [when(r), safeLink(r.slip)]));
         widths = [7, 8, 18, 12].concat(orderWidth, [18, 45]);
       } else if (view.kind === 'ship') {
         header = ['ลำดับ', 'ชื่อผู้รับ', 'เบอร์โทร', 'ที่อยู่', 'รายการ', 'ผู้สั่ง', 'ติดต่อผู้สั่ง'].concat(orderHead, ['สถานะ', 'เลขพัสดุ', 'วันที่สั่ง', 'ลิงก์สลิป']);
