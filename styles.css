@@ -211,6 +211,28 @@ input[type="search"]::-webkit-search-results-button { -webkit-appearance: none; 
 .filters .actions { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; }
 /* long labels ("ดาวน์โหลด Excel (12 ออเดอร์)") may wrap at large text sizes instead of pushing past the screen */
 .filters .actions .btn { white-space: normal; max-width: 100%; text-align: center; }
+.filters select {
+  width: 100%; min-height: 44px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface); color: var(--ink);
+}
+/* ช่องติ๊ก "แจกแล้ว" */
+.given-box {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px 0 8px;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: 0.875rem; color: var(--muted); cursor: pointer;
+  white-space: nowrap;
+}
+.given-box input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent); }
+.given-box.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+/* เช็กลิสต์แจกของ */
+.cl-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0 0 14px; }
+.cl-note { font-size: 0.8125rem; color: var(--muted); }
+.switch .label .sub { display: block; font-size: 0.75rem; font-weight: 400; color: var(--muted); }
+table.checklist tr.section th { padding: 14px 14px 6px; font-size: 0.9375rem; font-weight: 700; color: var(--ink); background: var(--bg); }
+table.checklist tr.section .group-count { margin-left: 10px; font-size: 0.8125rem; font-weight: 500; color: var(--muted); }
+table.checklist td.who { font-weight: 600; }
+table.checklist td.order { color: var(--muted); font-size: 0.875rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+table.checklist td.given { text-align: right; white-space: nowrap; }
+table.checklist tr.done td.who, table.checklist tr.done td.item { color: var(--muted); }
 /* เลือกคอลัมน์ที่จะลงไฟล์ Excel */
 .columns { grid-column: 1 / -1; }
 .columns > summary {
@@ -367,6 +389,13 @@ td.buyer { min-width: 130px; white-space: pre-line; font-size: 0.875rem; }
   table.cap td.order { grid-area: order; }
   table.cap td.when { grid-area: when; }
   table.cap td.slip { grid-area: slip; text-align: right; }
+  table.checklist tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "who given" "item given" "order given"; column-gap: 12px; row-gap: 2px; align-items: center; }
+  table.checklist tr.section { display: block; padding: 0; }
+  table.checklist tr.section th { display: block; padding: 16px 16px 6px; border-bottom: 0; white-space: normal; }
+  table.checklist td.who { grid-area: who; font-size: 1.0625rem; }
+  table.checklist td.item { grid-area: item; }
+  table.checklist td.order { grid-area: order; }
+  table.checklist td.given { grid-area: given; }
   table.cap td.order, table.cap td.when, table.cap td.slip { margin-top: 6px; font-size: 0.8125rem; }
 
   /* จัดส่ง */

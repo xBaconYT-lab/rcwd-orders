@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<!-- Everything the page may load or talk to, declared up front. GitHub Pages
+     cannot send HTTP headers, so this <meta> is the policy: only files from
+     this site, and network calls only to the Apps Script web app (which
+     answers through a redirect to script.googleusercontent.com).
+     form-action 'none' means the login form can never be submitted as a plain
+     GET with the password in the address bar if a script fails to load. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src https://script.google.com https://script.googleusercontent.com; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#eef5f1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1a16" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="RCWD">
+<title>เช็กลิสต์แจกของ · RCWD Jersey 2026</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preload" href="fonts/prompt-400-thai.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/prompt-400-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/teko-600-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="styles.css">
+<script src="config.js"></script>
+<script src="xlsx-lite.js" defer></script>
+<script src="app.js" defer></script>
+</head>
+<body data-page="checklist">
+
+<noscript><p class="framed">หน้านี้ต้องเปิด JavaScript ในเบราว์เซอร์ก่อน</p></noscript>
+
+<div class="loading" id="loading" role="status">กำลังโหลด…</div>
+
+<main class="login" id="login" hidden>
+  <form id="login-form" autocomplete="on" novalidate>
+    <h1 class="mark"><span class="num">RCWD</span><span>Jersey 2026</span></h1>
+    <p class="lead">เช็กลิสต์แจกเสื้อและหมวก เรียงตามชั้น/ห้อง <span class="nowrap">สำหรับทีมงาน</span></p>
+    <label class="field" for="username"><span>ชื่อผู้ใช้</span></label>
+    <input class="field-input" id="username" name="username" autocomplete="username" required autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="text" enterkeyhint="next" maxlength="64">
+    <label class="field" for="password"><span>รหัสผ่าน</span></label>
+    <div class="pw">
+      <input class="field-input" id="password" name="password" type="password" autocomplete="current-password" required enterkeyhint="go" maxlength="200">
+      <button class="pw-toggle" type="button" id="pw-toggle" aria-label="แสดงรหัสผ่าน" aria-pressed="false" aria-controls="password">
+        <svg class="eye" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+        <svg class="eye-off" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 10.6a3 3 0 0 0 4.2 4.2"/><path d="M9.9 5.1A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.2"/><path d="M6.2 6.2A17.3 17.3 0 0 0 2 12s3.5 7 10 7a10 10 0 0 0 4.3-1"/></svg>
+      </button>
+    </div>
+    <button class="btn primary" type="submit" id="login-btn">เข้าสู่ระบบ</button>
+    <p class="error" id="login-error" role="alert"></p>
+    <p class="setup-note" id="setup-note" hidden>
+      หน้านี้ยังไม่ได้เชื่อมกับ Google Sheet ใส่ลิงก์ Web app ของ Apps Script ใน config.js ก่อน
+      หรือ <a href="?demo">ดูตัวอย่างด้วยข้อมูลสมมติ</a>
+    </p>
+  </form>
+</main>
+
+<div class="wrap" id="app" hidden>
+  <header class="top">
+    <h1 class="mark" id="app-title" tabindex="-1">
+      <span class="num">RCWD</span>
+      <span>เช็กลิสต์แจกของ<small id="subtitle">รายการที่สลิปผ่านแล้ว</small></span>
+    </h1>
+    <div class="top-actions">
+      <button class="btn icon-btn" id="refresh-top" type="button" aria-label="ดึงข้อมูลล่าสุด" title="ดึงข้อมูลล่าสุด">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+      </button>
+      <a class="btn" href="./">ออเดอร์</a>
+      <a class="btn" id="sheet-link" target="_blank" rel="noopener noreferrer" hidden>เปิด Google Sheet</a>
+      <button class="btn" id="logout" type="button">ออกจากระบบ</button>
+    </div>
+  </header>
+
+  <div class="switch" id="switch" role="group" aria-label="เลือกหมวด"></div>
+
+  <form class="searchbar" id="searchbar" role="search">
+    <label class="sr-only" for="q">ค้นหา</label>
+    <div class="search-box">
+    <svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input type="search" id="q" placeholder="ชื่อหลังเสื้อ หรือเลข" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" maxlength="60">
+    <button class="q-clear" type="button" id="q-clear" aria-label="ล้างคำค้น" hidden>
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+    </div>
+    <p class="status" id="status" aria-live="polite"></p>
+  </form>
+
+  <div class="cl-bar">
+    <label class="given-box cl-hide"><input type="checkbox" id="hide-given"><span>ซ่อนที่แจกแล้ว</span></label>
+    <span class="cl-note">ติ๊กเมื่อของถึงมือคนสั่งแล้ว บันทึกลงชีตทันที</span>
+  </div>
+
+
+  <section class="panel" aria-labelledby="app-title">
+    <dl class="run" id="run"></dl>
+    <div class="table-scroll">
+      <table>
+        <thead id="thead"></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="empty" hidden>
+      <p id="empty-text">ยังไม่มีรายการ</p>
+    </div>
+  </section>
+
+
+
+  <footer class="foot">
+    <span id="updated"></span>
+    <span class="foot-right">
+      <span id="mode-note" class="mode-note" hidden></span>
+      <button type="button" id="refresh" class="link-btn">ดึงข้อมูลล่าสุด</button>
+    </span>
+  </footer>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+</body>
+</html>
