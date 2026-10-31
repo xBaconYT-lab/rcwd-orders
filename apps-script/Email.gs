@@ -74,6 +74,8 @@ function sendTestOrderEmail() {
 //   { action: 'email', order: '#12', resend: true }  ส่งออเดอร์เดียว (resend = ส่งซ้ำแม้เคยส่งแล้ว)
 // อ่านข้อมูลออเดอร์อย่างเดียว เขียนแค่แถวในแท็บ log อีเมล คืน emailed (เลขออเดอร์ที่ส่งแล้ว) ให้หน้าเว็บอัปเดตปุ่ม
 function emailFromWeb_(body) {
+  if (body.settings !== undefined) return emailSettingsFromWeb_(body.settings);
+  if (body.test) return emailTestFromWeb_(body.test);
   const ctx = context_();
   if (body.all === true) {
     // 90 วินาทีต่อรอบ (ถือ lock อยู่ ติ๊กจากเครื่องอื่นต้องรอ) ที่เหลือหน้าเว็บบอกให้กดอีกครั้ง
@@ -96,6 +98,66 @@ function emailFromWeb_(body) {
     return { ok: false, error: 'ออเดอร์ #' + no + ': ' + why };
   }
   return { ok: false, error: 'ไม่พบออเดอร์ #' + no };
+}
+
+// ================= ตั้งค่าอีเมลจากหน้าเว็บ =================
+// เก็บใน Script Properties (ไม่อยู่ในโค้ด ไม่อยู่บน GitHub) ทับค่าใน RCWD_EMAIL ตอนส่ง
+// ไม่มีช่องรหัสผ่าน: GmailApp ส่งจาก Gmail ของเจ้าของสคริปต์ ไม่ใช้ App Password
+const EMAIL_SETTINGS_KEY = 'RCWD_EMAIL_SETTINGS';
+const EMAIL_SETTING_LIMITS = { fromName: 60, replyTo: 120, from: 120, pickupText: 400, shipText: 400, contactLine: 200 };
+let emailSettingsLoaded_ = false;
+
+function loadEmailSettings_() {
+  if (emailSettingsLoaded_) return;
+  emailSettingsLoaded_ = true;
+  let saved = {};
+  try { saved = JSON.parse(PropertiesService.getScriptProperties().getProperty(EMAIL_SETTINGS_KEY) || '{}') || {}; } catch (e) { saved = {}; }
+  Object.keys(EMAIL_SETTING_LIMITS).forEach(k => { if (typeof saved[k] === 'string' && saved[k]) RCWD_EMAIL[k] = saved[k]; });
+}
+
+// settings: 'get' = อ่านค่าปัจจุบัน, { fromName, replyTo, from, pickupText, shipText, contactLine } = บันทึก (ช่องว่าง = ใช้ค่าในโค้ด)
+function emailSettingsFromWeb_(settings) {
+  const props = PropertiesService.getScriptProperties();
+  if (settings && typeof settings === 'object') {
+    const clean = {};
+    for (const k of Object.keys(EMAIL_SETTING_LIMITS)) {
+      const v = String(settings[k] === undefined ? '' : settings[k]).replace(/\s+/g, ' ').trim();
+      if (v.length > EMAIL_SETTING_LIMITS[k]) return { ok: false, error: 'ข้อความยาวเกินไป: ' + k };
+      if ((k === 'replyTo' || k === 'from') && v && !EMAIL_RE.test(v)) return { ok: false, error: 'อีเมลไม่ถูกต้อง: ' + v };
+      if (v) clean[k] = v;
+    }
+    props.setProperty(EMAIL_SETTINGS_KEY, JSON.stringify(clean));
+    emailSettingsLoaded_ = false;
+  }
+  loadEmailSettings_();
+  const out = {};
+  Object.keys(EMAIL_SETTING_LIMITS).forEach(k => { out[k] = RCWD_EMAIL[k] || ''; });
+  return { ok: true, settings: out, sender: Session.getEffectiveUser().getEmail(), quota: MailApp.getRemainingDailyQuota() };
+}
+
+// ส่งอีเมลตัวอย่างจากรายการที่เลือกเอง (ไม่ใช่ออเดอร์จริง ไม่จดลง log) หัวเรื่องขึ้นต้นด้วย [ทดสอบ]
+// test: { to, name, grade, room, shirts: [{ color, size, name, number }], caps, ship, address }
+function emailTestFromWeb_(test) {
+  const to = String(test.to || '').trim();
+  if (!EMAIL_RE.test(to)) return { ok: false, error: 'ใส่อีเมลที่จะส่งไปทดสอบ' };
+  if (MailApp.getRemainingDailyQuota() <= 1) return { ok: false, error: 'โควตาอีเมลวันนี้หมดแล้ว' };
+  const txt = (v, n) => String(v === undefined || v === null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
+  const shirtList = (Array.isArray(test.shirts) ? test.shirts : []).slice(0, 2)
+    .map(x => ({ color: txt(x && x.color, 20), size: txt(x && x.size, 6), backName: txt(x && x.name, 20), backNumber: txt(x && x.number, 3) }))
+    .filter(x => x.size || x.backName || x.backNumber);
+  const capQty = Math.max(0, Math.min(10, Math.floor(Number(test.caps) || 0)));
+  if (!shirtList.length && !capQty) return { ok: false, error: 'เลือกเสื้อหรือหมวกอย่างน้อย 1 อย่าง' };
+  const ship = test.ship === true;
+  const order = {
+    name: txt(test.name, 60) || 'ลูกค้าทดสอบ', grade: txt(test.grade, 10), room: txt(test.room, 10),
+    shirtList: shirtList, shirtCount: shirtList.length, hasCap: capQty > 0, capQty: capQty,
+    delivery: ship ? 'จัดส่ง' : 'รับเอง', shipAddress: ship ? txt(test.address, 300) : '', shipFee: ship ? Number(RCWD.shippingFee) || 0 : 0,
+    time: new Date(),
+  };
+  loadEmailSettings_();
+  const mail = buildOrderEmail_(order, { no: 'ทดสอบ', paid: expectedAmount_(order) });
+  deliverEmail_(to, '[ทดสอบ] ' + mail.subject, mail);
+  return { ok: true, sent: 1, to: to };
 }
 
 // เลขออเดอร์ที่ส่งอีเมลแล้ว เช่น ['#3', '#12'] (ใส่ในข้อมูลที่ส่งให้หน้าเว็บด้วย: emailed: emailedOrders_(ss))
@@ -155,6 +217,7 @@ function emailOrder_(ctx, response, meta) {
 }
 
 function deliverEmail_(to, subject, mail) {
+  loadEmailSettings_();
   const opts = { htmlBody: mail.html, name: RCWD_EMAIL.fromName, replyTo: RCWD_EMAIL.replyTo, noReply: false };
   if (RCWD_EMAIL.from) opts.from = RCWD_EMAIL.from;
   GmailApp.sendEmail(to, subject, mail.text, opts);
@@ -250,6 +313,7 @@ function orderSummary_(order, meta) {
 }
 
 function buildOrderEmail_(order, meta) {
+  loadEmailSettings_();
   const s = orderSummary_(order, meta);
   const subject = RCWD_EMAIL.subject.replace('{no}', s.no).replace('{name}', s.name || 'คุณลูกค้า');
 

@@ -478,6 +478,13 @@ table.profit td.neg, .run dd.neg { color: var(--danger); }
   width: 100%; min-height: 44px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface);
 }
 .pricing-note { margin: 0; font-size: 0.8125rem; color: var(--muted); }
+.pricing-form select, .pricing-form textarea {
+  width: 100%; min-height: 44px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: inherit; font: inherit;
+}
+.email-panel { margin: -6px 0 14px; }
+.email-panel .pricing-form + .pricing-form { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.pricing-form fieldset.wide, .pricing-form .wide-field { grid-column: 1 / -1; }
+.pricing-form fieldset.wide { grid-template-columns: 1fr; }
 @media (min-width: 720px) { .pricing-form fieldset { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); } }
 @media (min-width: 860px) { .pricing > summary { display: flex; } }
 

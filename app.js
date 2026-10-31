@@ -684,6 +684,7 @@
       ]));
     });
     $('tbody').replaceChildren(...rows);
+    if ($('email-panel')) $('email-panel').hidden = !d.emailed;
     const allBtn = $('email-all');
     if (allBtn) {
       const left = d.emailed ? all.filter((e) => e.key && !d.emailed.includes(e.key)).length : 0;
@@ -1362,6 +1363,56 @@
   on('clear-dates', 'click', clearDates);
   on('empty-reset', 'click', clearDates);
   on('export', 'click', exportExcel);
+  // ตั้งค่าอีเมล (เก็บใน Script Properties ของชีต) และส่งอีเมลทดสอบจากของที่เลือกเอง
+  async function emailCall(body, btn, busyText) {
+    if (!state.auth) { needLogin('เข้าสู่ระบบก่อนตั้งค่าอีเมล'); return null; }
+    if (state.auth.mode === 'demo') { toast('ตัวอย่าง: ไม่ได้ส่งหรือบันทึกจริง', 2500); return null; }
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = busyText;
+    try {
+      return await callApi(authBody(Object.assign({ action: 'email' }, body)), { timeoutMs: 60000 });
+    } catch (err) {
+      if (err.auth && err.code === 'session') showLogin(err.message);
+      else toast('ไม่สำเร็จ: ' + (err.message || ''), 8000);
+      return null;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  }
+  function fillEmailSettings(json) {
+    if (!json || !json.settings) return;
+    document.querySelectorAll('#email-settings-form [data-setting]').forEach((input) => { input.value = text(json.settings[input.dataset.setting]); });
+    if (json.sender) $('email-state').textContent = 'ส่งจาก ' + json.sender + (json.quota !== undefined ? ' · เหลือโควตาวันนี้ ' + json.quota + ' ฉบับ' : '');
+    const to = document.querySelector('#email-test-form [name="to"]');
+    if (to && !to.value && json.sender) to.value = json.sender;
+  }
+  let emailSettingsLoaded = false;
+  on('email-panel', 'toggle', async (e) => {
+    if (!e.target.open || emailSettingsLoaded) return;
+    const json = await emailCall({ settings: 'get' }, $('email-settings-save'), 'กำลังโหลด…');
+    if (json) { emailSettingsLoaded = true; fillEmailSettings(json); }
+  });
+  on('email-settings-form', 'submit', async (e) => {
+    e.preventDefault();
+    const settings = {};
+    document.querySelectorAll('#email-settings-form [data-setting]').forEach((input) => { settings[input.dataset.setting] = input.value.trim(); });
+    const json = await emailCall({ settings }, $('email-settings-save'), 'กำลังบันทึก…');
+    if (json) { fillEmailSettings(json); toast('บันทึกการตั้งค่าอีเมลแล้ว', 2500); }
+  });
+  on('email-test-form', 'submit', async (e) => {
+    e.preventDefault();
+    const f = e.target.elements;
+    const shirt = (n) => (f['color' + n].value ? { color: f['color' + n].value, size: f['size' + n].value, name: f['name' + n].value.trim(), number: f['number' + n].value.trim() } : null);
+    const test = {
+      to: f.to.value.trim(), name: f.name.value.trim(), grade: f.grade.value.trim(), room: f.room.value.trim(),
+      shirts: [shirt(1), shirt(2)].filter(Boolean), caps: Number(f.caps.value) || 0, ship: f.ship.value === '1', address: f.address.value.trim(),
+    };
+    if (!test.shirts.length && !test.caps) { toast('เลือกเสื้อหรือหมวกอย่างน้อย 1 อย่าง'); return; }
+    const json = await emailCall({ test }, $('email-test-send'), 'กำลังส่ง…');
+    if (json) toast('ส่งอีเมลทดสอบไปที่ ' + text(json.to) + ' แล้ว เช็กกล่องจดหมาย (และโฟลเดอร์สแปม)', 6000);
+  });
   on('email-all', 'click', () => (state.auth ? sendEmail('all') : needLogin('เข้าสู่ระบบก่อนส่งอีเมล')));
   on('tbody', 'click', (e) => {
     const btn = e.target.closest('[data-email-order]');

@@ -10,6 +10,7 @@ const assert = require('node:assert/strict');
 const sent = [];
 let quota = 100;
 const logRows = [];
+const props = {};
 const logSheet = {
   getLastRow: () => logRows.length + 1,
   getRange: (r, c, n, w) => ({
@@ -37,6 +38,7 @@ const ctx = vm.createContext({
   // Gmail / Apps Script services
   GmailApp: { sendEmail: (to, subject, text, opts) => { sent.push({ to, subject, text, opts }); } },
   MailApp: { getRemainingDailyQuota: () => quota },
+  PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] || null, setProperty: (k, v) => { props[k] = v; } }) },
   Session: { getEffectiveUser: () => ({ getEmail: () => 'me@example.com' }) },
   Utilities: { formatDate: (d) => d.toISOString().slice(0, 16).replace('T', ' ') },
   SpreadsheetApp: { getUi: () => ({ alert: () => {}, ButtonSet: { OK: 1 } }), getActiveSpreadsheet: () => ({ toast: () => {} }) },
@@ -125,6 +127,33 @@ test('the web buttons: one order (refuses a repeat unless resend), all pending, 
   assert.equal(all.ok, true);
   assert.equal(all.sent, 0, 'nothing left to send');
   assert.ok(all.emailed.includes('#12'));
+});
+
+test('settings from the web: saved in Script Properties, validated, and used by the next email', () => {
+  assert.equal(ctx.emailFromWeb_({ settings: { replyTo: 'not-an-email' } }).ok, false);
+  const r = ctx.emailFromWeb_({ settings: { fromName: 'ทีม RCWD', replyTo: 'team@example.com', pickupText: 'รับที่ห้อง 101' } });
+  assert.equal(r.ok, true);
+  assert.equal(r.settings.fromName, 'ทีม RCWD');
+  assert.ok(JSON.parse(props.RCWD_EMAIL_SETTINGS).replyTo === 'team@example.com');
+  assert.equal(ctx.emailFromWeb_({ settings: 'get' }).settings.pickupText, 'รับที่ห้อง 101');
+  const mail = ctx.buildOrderEmail_(order({ delivery: 'รับเอง' }), { no: 5, paid: 299 });
+  assert.ok(mail.html.includes('รับที่ห้อง 101'));
+});
+
+test('tester: sends a sample built from the chosen items to the given address, nothing logged', () => {
+  const before = sent.length;
+  const logged = logRows.length;
+  assert.equal(ctx.emailFromWeb_({ test: { to: 'bad' } }).ok, false, 'needs an address');
+  assert.equal(ctx.emailFromWeb_({ test: { to: 'me@example.com' } }).ok, false, 'needs at least one item');
+  const r = ctx.emailFromWeb_({ test: { to: 'me@example.com', name: 'ทดสอบ', shirts: [{ color: 'ขาว', size: 'XL', name: 'tester', number: '9' }], caps: 2, ship: true, address: '1 ถนนทดสอบ' } });
+  assert.equal(r.ok, true);
+  const m = sent[sent.length - 1];
+  assert.equal(sent.length, before + 1);
+  assert.equal(m.to, 'me@example.com');
+  assert.ok(m.subject.startsWith('[ทดสอบ] '));
+  assert.ok(m.opts.htmlBody.includes('RCWD Jersey สีขาว') && m.opts.htmlBody.includes('x 2') && m.opts.htmlBody.includes('1 ถนนทดสอบ'));
+  assert.equal(m.opts.replyTo, 'team@example.com', 'uses saved settings');
+  assert.equal(logRows.length, logged, 'tests are not logged');
 });
 
 console.log(`\n${passed} checks passed`);
