@@ -48,6 +48,7 @@ const ctx = vm.createContext({
   context_: () => ({ ss, form: { getResponses: () => [response('somchai@example.com')] } }),
   readSlipInfo_: () => ({ resp1: { no: 12, status: 'VERIFIED', paid: 1398 } }),
   slipSheet_: () => ({}),
+  getSs_: () => ss,
   retry_: (fn) => fn(),
   toOrder_: () => order(),
   expectedAmount_: (o) => (o.shirtList.length === 2 ? 590 : 299) + (o.hasCap ? 279 + (o.capQty - 1) * 279 : 0),
@@ -154,6 +155,27 @@ test('tester: sends a sample built from the chosen items to the given address, n
   assert.ok(m.opts.htmlBody.includes('RCWD Jersey สีขาว') && m.opts.htmlBody.includes('x 2') && m.opts.htmlBody.includes('1 ถนนทดสอบ'));
   assert.equal(m.opts.replyTo, 'team@example.com', 'uses saved settings');
   assert.equal(logRows.length, logged, 'tests are not logged');
+});
+
+test('external sender: prepare returns ready emails with the customer address, logged results mark them sent', () => {
+  const before = sent.length;
+  logRows.length = 0;
+  const p = ctx.emailFromWeb_({ prepare: { all: true, limit: 10 } });
+  assert.equal(p.ok, true);
+  assert.equal(p.jobs.length, 1);
+  assert.equal(p.jobs[0].no, '#12');
+  assert.equal(p.jobs[0].to, 'somchai@example.com');
+  assert.ok(p.jobs[0].html.includes('#12') && p.jobs[0].subject.includes('#12'));
+  assert.equal(p.replyTo, 'team@example.com');
+  assert.equal(sent.length, before, 'prepare sends nothing itself');
+  const l = ctx.emailFromWeb_({ logged: [{ no: '#12', to: 'somchai@example.com', name: 'x', status: 'sent' }, { no: 'bad' }] });
+  assert.ok(l.emailed.includes('#12'));
+  assert.equal(logRows.length, 1, 'bad rows ignored');
+  assert.equal(ctx.emailFromWeb_({ prepare: { all: true } }).jobs.length, 0, 'sent ones are skipped');
+  assert.equal(ctx.emailFromWeb_({ prepare: { order: '#12' } }).ok, false, 'single needs resend once sent');
+  assert.equal(ctx.emailFromWeb_({ prepare: { order: '#12', resend: true } }).jobs.length, 1);
+  const t = ctx.emailFromWeb_({ test: { to: 'me@example.com', caps: 1 }, prepareOnly: true });
+  assert.ok(t.jobs[0].subject.startsWith('[ทดสอบ] ') && sent.length === before);
 });
 
 console.log(`\n${passed} checks passed`);

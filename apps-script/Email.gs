@@ -75,7 +75,9 @@ function sendTestOrderEmail() {
 // อ่านข้อมูลออเดอร์อย่างเดียว เขียนแค่แถวในแท็บ log อีเมล คืน emailed (เลขออเดอร์ที่ส่งแล้ว) ให้หน้าเว็บอัปเดตปุ่ม
 function emailFromWeb_(body) {
   if (body.settings !== undefined) return emailSettingsFromWeb_(body.settings);
-  if (body.test) return emailTestFromWeb_(body.test);
+  if (body.test) return emailTestFromWeb_(body.test, body.prepareOnly === true);
+  if (body.prepare) return emailPrepare_(body.prepare);
+  if (body.logged) return emailLogged_(body.logged);
   const ctx = context_();
   if (body.all === true) {
     // 90 วินาทีต่อรอบ (ถือ lock อยู่ ติ๊กจากเครื่องอื่นต้องรอ) ที่เหลือหน้าเว็บบอกให้กดอีกครั้ง
@@ -137,7 +139,7 @@ function emailSettingsFromWeb_(settings) {
 
 // ส่งอีเมลตัวอย่างจากรายการที่เลือกเอง (ไม่ใช่ออเดอร์จริง ไม่จดลง log) หัวเรื่องขึ้นต้นด้วย [ทดสอบ]
 // test: { to, name, grade, room, shirts: [{ color, size, name, number }], caps, ship, address }
-function emailTestFromWeb_(test) {
+function emailTestFromWeb_(test, prepareOnly) {
   const to = String(test.to || '').trim();
   if (!EMAIL_RE.test(to)) return { ok: false, error: 'ใส่อีเมลที่จะส่งไปทดสอบ' };
   if (MailApp.getRemainingDailyQuota() <= 1) return { ok: false, error: 'โควตาอีเมลวันนี้หมดแล้ว' };
@@ -156,8 +158,72 @@ function emailTestFromWeb_(test) {
   };
   loadEmailSettings_();
   const mail = buildOrderEmail_(order, { no: 'ทดสอบ', paid: expectedAmount_(order) });
+  if (prepareOnly) return Object.assign({ ok: true, jobs: [{ no: 'ทดสอบ', to: to, name: order.name, subject: '[ทดสอบ] ' + mail.subject, html: mail.html, text: mail.text }] }, senderInfo_());
   deliverEmail_(to, '[ทดสอบ] ' + mail.subject, mail);
   return { ok: true, sent: 1, to: to };
+}
+
+// ================= ให้ตัวส่งภายนอก (Cloudflare Worker ใน mailer/) =================
+// Worker ส่งผ่าน Gmail SMTP ด้วย app password ของตัวเอง สคริปต์นี้แค่ตรวจสิทธิ์ (handleWeb_) เตรียมเนื้อหา
+// พร้อมอีเมลลูกค้าจากฟอร์ม แล้วจดผลที่ Worker ส่งกลับมาลง log อีเมลลูกค้าไม่ผ่านเบราว์เซอร์
+//   { prepare: { order: '#12', resend } }  ออเดอร์เดียว
+//   { prepare: { all: true, limit: 10 } }  ออเดอร์ที่สลิปผ่านและยังไม่ได้ส่ง ทีละชุด
+//   -> { ok, jobs: [{ no, to, name, subject, html, text }], noEmail: ['#3'], left, fromName, replyTo }
+function emailPrepare_(p) {
+  const ctx = context_();
+  const info = readSlipInfo_(slipSheet_(ctx.ss));
+  const sentBefore = readEmailLog_(ctx.ss);
+  const limit = Math.max(1, Math.min(20, Math.floor(Number(p.limit) || 10)));
+  let want = null;
+  if (p.all !== true) {
+    const m = String(p.order || '').trim().match(/^#(\d{1,6})$/);
+    if (!m) return { ok: false, error: 'เลขออเดอร์ไม่ถูกต้อง' };
+    want = m[1];
+    if (p.resend !== true && sentBefore[want]) return { ok: false, error: 'ออเดอร์ #' + want + ' ส่งอีเมลไปแล้ว' };
+  }
+  const jobs = [];
+  const noEmail = [];
+  let left = 0;
+  let found = false;
+  retry_(() => ctx.form.getResponses()).forEach(response => {
+    const meta = info[response.getId()];
+    if (!meta || !meta.no) return;
+    if (want !== null && String(meta.no) !== want) return;
+    found = true;
+    if (String(meta.status).toUpperCase() !== 'VERIFIED') return;
+    if (want === null && sentBefore[meta.no]) return;
+    if (jobs.length >= limit) { left++; return; }
+    const order = toOrder_(response, ctx);
+    const to = customerEmail_(response, order);
+    if (!to) {
+      noEmail.push('#' + meta.no);
+      if (want !== null) logEmail_(ctx.ss, meta.no, '', order.name || '', 'ไม่มีอีเมล', 'ฟอร์มไม่ได้เก็บอีเมล หรือกรอกไม่ถูกต้อง');
+      return;
+    }
+    const mail = buildOrderEmail_(order, meta);
+    jobs.push({ no: '#' + meta.no, to: to, name: order.name || '', subject: mail.subject, html: mail.html, text: mail.text });
+  });
+  if (want !== null && !found) return { ok: false, error: 'ไม่พบออเดอร์ #' + want };
+  if (want !== null && !jobs.length && !noEmail.length) return { ok: false, error: 'ออเดอร์ #' + want + ' สลิปยังไม่ผ่าน ยังไม่ส่งอีเมล' };
+  return Object.assign({ ok: true, jobs: jobs, noEmail: noEmail, left: left }, senderInfo_());
+}
+
+// ผลจาก Worker: [{ no: '#12', to, name, status: 'sent' | 'failed', note }] -> แถวใน log (จดอย่างเดียว ไม่แก้ออเดอร์)
+function emailLogged_(list) {
+  const rows = Array.isArray(list) ? list.slice(0, 50) : [];
+  const ss = getSs_();
+  rows.forEach(r => {
+    const m = String((r || {}).no || '').match(/^#(\d{1,6})$/);
+    if (!m) return;
+    const status = r.status === 'sent' ? 'ส่งแล้ว' : 'ส่งไม่ได้';
+    logEmail_(ss, m[1], String(r.to || '').slice(0, 120), String(r.name || '').slice(0, 60), status, String(r.note || '').slice(0, 300));
+  });
+  return { ok: true, emailed: emailedOrders_(ss) };
+}
+
+function senderInfo_() {
+  loadEmailSettings_();
+  return { fromName: RCWD_EMAIL.fromName, replyTo: RCWD_EMAIL.replyTo };
 }
 
 // เลขออเดอร์ที่ส่งอีเมลแล้ว เช่น ['#3', '#12'] (ใส่ในข้อมูลที่ส่งให้หน้าเว็บด้วย: emailed: emailedOrders_(ss))
