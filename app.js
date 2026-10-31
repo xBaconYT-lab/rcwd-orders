@@ -566,6 +566,7 @@
     const done = all.filter((e) => e.state === 'all').length;
     const some = all.filter((e) => e.state === 'some').length;
     $('switch').hidden = true;
+    renderReadonlyBar();
     $('q').placeholder = 'ชื่อ ชั้น/ห้อง เสื้อ หมวก หรือ #ออเดอร์';
     $('q-clear').hidden = !state.q;
     const hideBox = $('hide-given');
@@ -680,7 +681,21 @@
   }
 
   // แก้ชื่อ/เลขหลังเสื้อได้เมื่อแถวมีเลขออเดอร์ (สคริปต์ต้องมี Update.gs ด้วย จึงจะบันทึกลงชีตได้)
-  const canEdit = () => state.withOrder && !!state.auth;
+  const canEdit = () => state.withOrder; // ไม่ได้เข้าสู่ระบบ: ปุ่ม/ช่องติ๊กยังอยู่ กดแล้วพาไปเข้าสู่ระบบก่อน
+  const needLogin = (why) => { showLogin(why, { forget: false }); return true; };
+  // แถบบอกสถานะดูอย่างเดียว (เปิดจากข้อมูลที่เคยดึงไว้ ยังไม่ได้เข้าสู่ระบบ)
+  function renderReadonlyBar() {
+    let bar = $('readonly-bar');
+    if (state.auth) { if (bar) bar.remove(); return; }
+    if (!bar) {
+      bar = el('div', { id: 'readonly-bar', class: 'readonly-bar', role: 'status' }, [
+        el('span', { text: 'ข้อมูลที่เคยดึงไว้ ดูได้อย่างเดียว' }),
+        el('button', { type: 'button', class: 'btn primary small', id: 'readonly-login', text: 'เข้าสู่ระบบเพื่อติ๊ก/แก้ไข/ดึงใหม่' }),
+      ]);
+      bar.querySelector('button').addEventListener('click', () => needLogin(''));
+      document.querySelector('.panel').before(bar);
+    }
+  }
   const editKey = (row) => text(row.order);
   function shirtRow(row, i) {
     const nameBad = badName(row.name);
@@ -875,6 +890,7 @@
     if (!d) return;
     if (CHECKLIST) return renderChecklist();
     const views = viewList(d);
+    renderReadonlyBar();
     const view = currentView();
     state.view = view.key;
     // สคริปต์เวอร์ชันใหม่ส่งเลขออเดอร์ / จำนวนหมวกมาด้วย (เวอร์ชันเก่าไม่มี ก็ซ่อนคอลัมน์นั้น)
@@ -1263,6 +1279,7 @@
   on('tbody', 'click', (e) => {
     const btn = e.target.closest('[data-edit]');
     if (btn) {
+      if (!state.auth) return needLogin('เข้าสู่ระบบก่อนแก้ไข');
       if (state.busy) return;
       state.editing = btn.dataset.edit;
       render();
@@ -1276,7 +1293,9 @@
   on('hide-given', 'change', (e) => { state.hideGiven = e.target.checked; writeUi({ view: state.view, hideGiven: state.hideGiven }); render(); });
   on('tbody', 'change', (e) => {
     const cb = e.target.closest('[data-given-order]');
-    if (cb) saveGivenOrder(cb);
+    if (!cb) return;
+    if (!state.auth) { cb.checked = !cb.checked; needLogin('เข้าสู่ระบบก่อนติ๊กแจกแล้ว'); return; }
+    saveGivenOrder(cb);
   });
 
   document.addEventListener('keydown', (e) => {
