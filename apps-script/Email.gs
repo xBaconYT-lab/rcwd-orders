@@ -15,7 +15,10 @@
  *       .addItem('ส่งอีเมลทดสอบมาหาฉัน', 'sendTestOrderEmail')
  *  3. (ถ้าอยากให้ส่งเองทันทีที่สลิปผ่าน) ใน onOrderSubmit หลัง syncOrder_(...) เพิ่ม
  *       if (slip.status === 'VERIFIED') try { emailOrderIfNeeded_(ctx, e.response); } catch (err) { Logger.log(err); }
- *  4. รัน sendTestOrderEmail ครั้งแรก Google จะขอสิทธิ์ Gmail กด Allow แล้วเปิดดูอีเมลที่ได้
+ *  4. ปุ่มส่งอีเมลบนหน้าเช็กลิสต์ (ทีละออเดอร์ / ทั้งหมด): ใน handleWeb_ หลังตรวจสิทธิ์ เพิ่ม
+ *       if (body.action === 'email') return withLock_(() => { const r = emailFromWeb_(body); CacheService.getScriptCache().remove('web_data'); return r; });
+ *     และในข้อมูลที่ส่งกลับ เพิ่ม  emailed: emailedOrders_(ctx.ss),
+ *  5. รัน sendTestOrderEmail ครั้งแรก Google จะขอสิทธิ์ Gmail กด Allow แล้วเปิดดูอีเมลที่ได้
  *
  * โควตา: บัญชี Gmail ธรรมดาส่งได้ประมาณ 100 ฉบับต่อวัน สคริปต์หยุดเองเมื่อโควตาหมด กดเมนูอีกครั้งวันถัดไปจะส่งต่อจากที่ค้าง
  * อีเมลลูกค้า: ใช้อีเมลที่ Google Form เก็บ (ตั้งค่าฟอร์ม > เก็บอีเมล) หรือคำถามในฟอร์มที่ชื่อมีคำว่า "อีเมล"/"email"
@@ -63,6 +66,41 @@ function sendTestOrderEmail() {
   const mail = buildOrderEmail_(toOrder_(picked.response, ctx), picked.meta);
   deliverEmail_(me, '[ทดสอบ] ' + mail.subject, mail);
   SpreadsheetApp.getActiveSpreadsheet().toast('ส่งตัวอย่างไปที่ ' + me + ' แล้ว (ออเดอร์ #' + picked.meta.no + ')', 'อีเมลทดสอบ', 8);
+}
+
+// ================= จากหน้าเว็บ (หน้าเช็กลิสต์) =================
+// handleWeb_ เรียกหลังตรวจสิทธิ์แล้ว ครอบด้วย withLock_ (กันกดส่งซ้ำพร้อมกันสองเครื่อง) ในนี้ห้ามเรียก withLock_ ซ้ำ:
+//   { action: 'email', all: true }                  ส่งทุกออเดอร์ที่สลิปผ่านและยังไม่เคยส่ง
+//   { action: 'email', order: '#12', resend: true }  ส่งออเดอร์เดียว (resend = ส่งซ้ำแม้เคยส่งแล้ว)
+// อ่านข้อมูลออเดอร์อย่างเดียว เขียนแค่แถวในแท็บ log อีเมล คืน emailed (เลขออเดอร์ที่ส่งแล้ว) ให้หน้าเว็บอัปเดตปุ่ม
+function emailFromWeb_(body) {
+  const ctx = context_();
+  if (body.all === true) {
+    // 90 วินาทีต่อรอบ (ถือ lock อยู่ ติ๊กจากเครื่องอื่นต้องรอ) ที่เหลือหน้าเว็บบอกให้กดอีกครั้ง
+    const out = sendPendingOrderEmails_(ctx, 90 * 1000);
+    return { ok: true, sent: out.sent, noEmail: out.noEmail, failed: out.failed, left: out.left, quotaOut: out.quotaOut, emailed: emailedOrders_(ctx.ss) };
+  }
+  const m = String(body.order || '').trim().match(/^#(\d{1,6})$/);
+  if (!m) return { ok: false, error: 'เลขออเดอร์ไม่ถูกต้อง' };
+  const no = m[1];
+  if (body.resend !== true && readEmailLog_(ctx.ss)[no]) return { ok: false, error: 'ออเดอร์ #' + no + ' ส่งอีเมลไปแล้ว' };
+  const info = readSlipInfo_(slipSheet_(ctx.ss));
+  const responses = retry_(() => ctx.form.getResponses());
+  for (let i = 0; i < responses.length; i++) {
+    const meta = info[responses[i].getId()];
+    if (!meta || String(meta.no) !== no) continue;
+    if (String(meta.status).toUpperCase() !== 'VERIFIED') return { ok: false, error: 'ออเดอร์ #' + no + ' สลิปยังไม่ผ่าน ยังไม่ส่งอีเมล' };
+    const r = emailOrder_(ctx, responses[i], meta);
+    if (r === 'sent') return { ok: true, sent: 1, order: '#' + no, emailed: emailedOrders_(ctx.ss) };
+    const why = { no_email: 'ออเดอร์นี้ไม่มีอีเมลลูกค้า', quota: 'โควตาอีเมลวันนี้หมดแล้ว ลองพรุ่งนี้' }[r] || 'ส่งไม่ได้ ดูแท็บ ' + RCWD_EMAIL.logSheet;
+    return { ok: false, error: 'ออเดอร์ #' + no + ': ' + why };
+  }
+  return { ok: false, error: 'ไม่พบออเดอร์ #' + no };
+}
+
+// เลขออเดอร์ที่ส่งอีเมลแล้ว เช่น ['#3', '#12'] (ใส่ในข้อมูลที่ส่งให้หน้าเว็บด้วย: emailed: emailedOrders_(ss))
+function emailedOrders_(ss) {
+  return Object.keys(readEmailLog_(ss)).map(n => '#' + n);
 }
 
 // ================= ส่ง =================

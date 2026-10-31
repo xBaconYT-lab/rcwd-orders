@@ -178,7 +178,7 @@
   async function callApi(body, opts) {
     if (!API_URL) throw Object.assign(new Error('หน้านี้ยังไม่ได้เชื่อมกับ Google Sheet'), { setup: true });
     const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), FETCH_TIMEOUT_MS);
+    const timer = setTimeout(() => ctl.abort(), (opts && opts.timeoutMs) || FETCH_TIMEOUT_MS);
     let res;
     try {
       // A plain string body with no custom header is a "simple" request: Apps Script answers through a
@@ -214,6 +214,7 @@
       shirts: list(json.shirts),
       caps: list(json.caps),
       shipping: Array.isArray(json.shipping) ? list(json.shipping) : null,
+      emailed: Array.isArray(json.emailed) ? json.emailed.map(text) : null, // null = สคริปต์ยังไม่มีปุ่มส่งอีเมล
     };
   }
 
@@ -575,6 +576,52 @@
       try { callApi(authBody({ action: 'update', kind: 'orders', changes: batch }), { keepalive: true }).catch(() => {}); } catch (e) { /* ignore */ }
     }
   });
+  // ---------- ส่งอีเมลสรุปออเดอร์ (Email.gs) ----------
+  // { action: 'email', order: '#12' } ทีละออเดอร์ (ส่งแล้วกดอีกทีเป็นส่งซ้ำ) หรือ { action: 'email', all: true } ทุกออเดอร์ที่ยังไม่ได้ส่ง
+  // ส่งจาก Gmail ของเจ้าของชีต จดในแท็บ log อีเมล ไม่แก้ข้อมูลออเดอร์
+  const emailBusy = new Set();
+  function emailButton(key) {
+    const d = state.data;
+    if (!d.emailed) return null;
+    const sent = d.emailed.includes(key);
+    const busy = emailBusy.has(key) || emailBusy.has('all');
+    return el('button', {
+      class: 'btn small email-btn' + (sent ? ' sent' : ''), type: 'button', 'data-email-order': key, disabled: busy ? '' : null,
+      'aria-label': (sent ? 'ส่งอีเมลสรุปซ้ำ ' : 'ส่งอีเมลสรุป ') + key,
+      text: emailBusy.has(key) ? 'กำลังส่ง…' : sent ? 'ส่งอีเมลแล้ว · ส่งซ้ำ' : 'ส่งอีเมล',
+    });
+  }
+  async function sendEmail(key) {
+    const d = state.data;
+    const all = key === 'all';
+    const resend = !all && d.emailed.includes(key);
+    const left = all ? checklistOrders().filter((e) => e.key && !d.emailed.includes(e.key)).length : 0;
+    const ask = all ? 'ส่งอีเมลสรุปออเดอร์ให้ลูกค้า ' + left + ' ออเดอร์ที่ยังไม่ได้ส่ง?\n(ส่งจาก Gmail ของชีต ส่งแล้วยกเลิกไม่ได้)'
+      : resend ? 'ออเดอร์ ' + key + ' ส่งอีเมลไปแล้ว ส่งซ้ำอีกครั้ง?' : 'ส่งอีเมลสรุปออเดอร์ ' + key + ' ให้ลูกค้า?';
+    if (!window.confirm(ask)) return;
+    if (state.auth.mode === 'demo') { toast('ตัวอย่าง: ไม่ได้ส่งอีเมลจริง', 2500); return; }
+    emailBusy.add(key);
+    render();
+    try {
+      const json = await callApi(authBody(all ? { action: 'email', all: true } : { action: 'email', order: key, resend }), { timeoutMs: 150000 });
+      if (Array.isArray(json.emailed)) state.data.emailed = json.emailed.map(text); // state.data: a background pull may have replaced d
+      writeCache(stripForCache(Object.assign({}, state.data)));
+      if (!all) toast('ส่งอีเมลแล้ว ' + key, 2500);
+      else {
+        let msg = 'ส่งอีเมลแล้ว ' + (json.sent || 0) + ' ฉบับ';
+        if (json.noEmail) msg += ', ไม่มีอีเมล ' + json.noEmail + ' ออเดอร์';
+        if (json.failed) msg += ', ส่งไม่ได้ ' + json.failed;
+        if (json.left) msg += ', ยังค้าง ' + json.left + (json.quotaOut ? ' (โควตาวันนี้หมด กดใหม่พรุ่งนี้)' : ' (กดอีกครั้งเพื่อส่งต่อ)');
+        toast(msg, 9000);
+      }
+    } catch (err) {
+      if (err.auth && err.code === 'session') showLogin(err.message);
+      else toast('ส่งอีเมลไม่สำเร็จ: ' + (err.message || ''), 8000);
+    } finally {
+      emailBusy.delete(key);
+      render();
+    }
+  }
   function renderChecklist() {
     const d = state.data;
     const has = (rows, key) => rows.some((r) => Object.prototype.hasOwnProperty.call(r, key));
@@ -632,11 +679,18 @@
           el('span', { class: 'dot ' + (it.kind === 'shirt' ? (SWATCH[text(it.row.color)] || 'other') : 'cap'), 'aria-hidden': 'true' }),
           it.label,
         ])))]),
-        e.key ? el('td', { class: 'order', text: e.key }) : el('td', { class: 'order' }, [el('span', { class: 'manual', text: 'เพิ่มเอง' })]),
+        e.key ? el('td', { class: 'order' }, [e.key, emailButton(e.key)]) : el('td', { class: 'order' }, [el('span', { class: 'manual', text: 'เพิ่มเอง' })]),
         orderGivenCell(e),
       ]));
     });
     $('tbody').replaceChildren(...rows);
+    const allBtn = $('email-all');
+    if (allBtn) {
+      const left = d.emailed ? all.filter((e) => e.key && !d.emailed.includes(e.key)).length : 0;
+      allBtn.hidden = !d.emailed;
+      allBtn.disabled = emailBusy.size > 0 || !left;
+      allBtn.textContent = emailBusy.has('all') ? 'กำลังส่งอีเมล…' : left ? 'ส่งอีเมลสรุปทุกคนที่ยังไม่ได้ส่ง (' + left + ')' : 'ส่งอีเมลครบทุกออเดอร์แล้ว';
+    }
     const empty = shown.length === 0;
     $('empty').hidden = !empty;
     if (empty) $('empty-text').textContent = state.q ? 'ไม่พบ "' + state.q + '"' : state.hideGiven && all.length ? 'แจกครบทุกออเดอร์แล้ว' : 'ยังไม่มีรายการ';
@@ -1162,7 +1216,7 @@
   // what is cached: the data only, never the token or anything about the sign-in
   function stripForCache(json) {
     const out = {};
-    for (const k of ['updatedAt', 'sheetUrl', 'onlyVerified', 'sizes', 'colors', 'capLabel', 'shipLabel', 'shirts', 'caps', 'shipping']) {
+    for (const k of ['updatedAt', 'sheetUrl', 'onlyVerified', 'sizes', 'colors', 'capLabel', 'shipLabel', 'shirts', 'caps', 'shipping', 'emailed']) {
       if (json[k] !== undefined) out[k] = json[k];
     }
     return out;
@@ -1308,6 +1362,13 @@
   on('clear-dates', 'click', clearDates);
   on('empty-reset', 'click', clearDates);
   on('export', 'click', exportExcel);
+  on('email-all', 'click', () => (state.auth ? sendEmail('all') : needLogin('เข้าสู่ระบบก่อนส่งอีเมล')));
+  on('tbody', 'click', (e) => {
+    const btn = e.target.closest('[data-email-order]');
+    if (!btn) return;
+    if (!state.auth) return needLogin('เข้าสู่ระบบก่อนส่งอีเมล');
+    sendEmail(btn.dataset.emailOrder);
+  });
 
   // แก้ไขชื่อ/เลขหลังเสื้อ
   on('tbody', 'click', (e) => {

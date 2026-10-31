@@ -27,10 +27,10 @@
 <link rel="preload" href="fonts/prompt-400-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/teko-600-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="fonts/fonts.css">
-<link rel="stylesheet" href="styles.css?v=8383176">
+<link rel="stylesheet" href="styles.css?v=1b6bde0">
 <script src="config.js"></script>
-<script src="xlsx-lite.js?v=8383176" defer></script>
-<script src="app.js?v=8383176" defer></script>
+<script src="xlsx-lite.js?v=1b6bde0" defer></script>
+<script src="app.js?v=1b6bde0" defer></script>
 </head>
 <body data-page="checklist">
 
@@ -94,6 +94,7 @@
   <div class="cl-bar">
     <label class="given-box cl-hide"><input type="checkbox" id="hide-given"><span>ซ่อนที่แจกแล้ว</span></label>
     <button class="btn primary" type="button" id="export">ดาวน์โหลด Excel</button>
+    <button class="btn" type="button" id="email-all" hidden>ส่งอีเมลสรุปทุกคนที่ยังไม่ได้ส่ง</button>
     <span class="cl-note">หนึ่งแถว = หนึ่งคนสั่ง รวมทุกชิ้นที่ต้องให้ ติ๊กเมื่อส่งของครบแล้ว บันทึกลงชีตทันที</span>
   </div>
   <details class="columns cl-columns" id="columns">
