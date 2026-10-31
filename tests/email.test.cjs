@@ -110,4 +110,21 @@ test('when the daily quota is nearly gone it stops instead of failing', () => {
   quota = 100;
 });
 
+test('the web buttons: one order (refuses a repeat unless resend), all pending, and the emailed list', () => {
+  const before = sent.length;
+  const again = ctx.emailFromWeb_({ order: '#12' });
+  assert.equal(again.ok, false, 'already sent: needs resend');
+  assert.equal(sent.length, before);
+  const re = ctx.emailFromWeb_({ order: '#12', resend: true });
+  assert.equal(re.ok, true);
+  assert.equal(sent.length, before + 1);
+  assert.ok(re.emailed.includes('#12'));
+  assert.equal(ctx.emailFromWeb_({ order: '#99' }).ok, false, 'unknown order');
+  assert.equal(ctx.emailFromWeb_({ order: '12; drop' }).ok, false, 'bad order key');
+  const all = ctx.emailFromWeb_({ all: true });
+  assert.equal(all.ok, true);
+  assert.equal(all.sent, 0, 'nothing left to send');
+  assert.ok(all.emailed.includes('#12'));
+});
+
 console.log(`\n${passed} checks passed`);

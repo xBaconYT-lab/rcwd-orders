@@ -192,7 +192,7 @@ Where the button is: **in the Google Sheet menu, not on the website** — RCWD >
 - Sends via `GmailApp` from the script owner (rcwd.official@gmail.com): sender name, reply-to, plain-text twin, reason footer → good deliverability without an app password. Quota ≈100/day on a consumer Gmail; stops early, continues next run.
 - Customer email: `response.getRespondentEmail()` (form collects emails) or any form question whose title contains "อีเมล"/"email". The email column already in the sheet comes from the form, so it works.
 - Log tab "อีเมลที่ส่งแล้ว (log)" prevents duplicates; delete a row to resend. Nothing else is written.
-- A website button for emails was NOT built (it would need the page to call a new `email` action; the menu is simpler and keeps Gmail auth on the owner's side). If wanted: add `action: 'email', order: '#12'` handling in `handleWeb_` calling `emailOrder_` for that response id, and a per-row button on the checklist.
+- Website buttons (checklist): per-order "ส่งอีเมล" / "ส่งอีเมลแล้ว · ส่งซ้ำ" and "ส่งอีเมลสรุปทุกคนที่ยังไม่ได้ส่ง (N)". They call `{action:'email', order:'#12', resend?}` / `{action:'email', all:true}` → `emailFromWeb_` in Email.gs (handleWeb_ wraps it in `withLock_` and clears `web_data`; send-all runs 90 s per click). The data payload carries `emailed: emailedOrders_(ss)`; the buttons only appear when it is present. Both confirm before sending.
 
 ## 5. Owner setup still outstanding (summary)
 
