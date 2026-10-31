@@ -50,7 +50,7 @@ Repo layout (all live on `main`, deployed by GitHub Pages to rcwd.leamm.com):
 ### Data flow / performance decisions
 - `callApi(body)` POSTs a JSON string (no custom headers → no CORS preflight) to the Apps Script `/exec`.
 - Token mode (needs Auth.gs): `{action:'login'|'refresh'|'logout'|'update', token}`; token in `sessionStorage` (`rcwd-session`), or `localStorage` when running as a home-screen app. Old password mode: `{username, password, …}`, password only in memory.
-- **No automatic re-pulls.** Data is cached on the device (`rcwd-cache`, same storage as the session, 12 h, cleared on logout). Reload/page switch/reopen show the cached list instantly; "ดึงข้อมูลล่าสุด" is the only refresh. Without credentials the cached list is read-only: a banner + tapping a tick/edit opens the login (this last part is in PR "signed-out fix", see §6).
+- **Cross-device sync by polling.** Data is cached on the device (`rcwd-cache`, same storage as the session, 12 h, cleared on logout). Reload/page switch/reopen show the cached list instantly, then `autoSync` pulls behind it; while signed in it also pulls every 30 s while the page is visible and on focus/return, so a tick or edit on one device shows on the others. It skips a round while the name/number editor is open, an edit is saving, or ticks are pending, and a pull that lands with the editor open does not re-render. Without credentials the cached list is read-only: a banner + tapping a tick/edit opens the login (this last part is in PR "signed-out fix", see §6).
 - Why things felt slow: Apps Script cold executions (lock + opening the Google Form + reading all tabs), 2–6 s each. Fixes delivered: server-side 45 s response cache, lazy form open, batched ticks, client cache. Hosting elsewhere would not help; Google is the slow part.
 
 ### Security model (page)
@@ -83,7 +83,7 @@ and `webLogSheet_`. Still to apply, in this order:
    ```
 3. In `readTabRows_` change `const all = tab.spec.headers.concat(tab.spec.userHeaders || []);` → `const all = Object.keys(tab.cols);`
 4. In `handleWeb_` inside `shirts.push({…})` add `buyer: m.name || '', grade: m.grade || '', room: m.room || '', given: /^true$/i.test(r['แจกแล้ว'] || ''),` and inside `caps.push({…})` add `given: /^true$/i.test(r['แจกแล้ว'] || ''),`.
-5. Replace `updateFromWeb_` with the version below (name/number, single `given`, and the batched `orders` kind the checklist now sends).
+5. Replace `updateFromWeb_` with the version below, and after any write that changed cells clear the 45 s `web_data` response cache (the same call `onOrderSubmit` uses) so other devices see the change on their next pull instead of up to 45 s later (name/number, single `given`, and the batched `orders` kind the checklist now sends).
 6. In the sheet: a column headed exactly `แจกแล้ว` in each Jersey tab and in หมวก RCWD (right after ออเดอร์; Insert > Checkbox). Done by the owner on 31 Oct for หมวก RCWD at least.
 7. Deploy > Manage deployments > pencil > New version.
 
