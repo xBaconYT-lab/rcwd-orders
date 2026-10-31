@@ -27,10 +27,10 @@
 <link rel="preload" href="fonts/prompt-400-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/teko-600-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="fonts/fonts.css">
-<link rel="stylesheet" href="styles.css?v=1b6bde0">
+<link rel="stylesheet" href="styles.css?v=e11f356">
 <script src="config.js"></script>
-<script src="xlsx-lite.js?v=1b6bde0" defer></script>
-<script src="app.js?v=1b6bde0" defer></script>
+<script src="xlsx-lite.js?v=e11f356" defer></script>
+<script src="app.js?v=e11f356" defer></script>
 </head>
 <body data-page="checklist">
 
@@ -97,6 +97,58 @@
     <button class="btn" type="button" id="email-all" hidden>ส่งอีเมลสรุปทุกคนที่ยังไม่ได้ส่ง</button>
     <span class="cl-note">หนึ่งแถว = หนึ่งคนสั่ง รวมทุกชิ้นที่ต้องให้ ติ๊กเมื่อส่งของครบแล้ว บันทึกลงชีตทันที</span>
   </div>
+  <details class="more pricing email-panel" id="email-panel" hidden>
+    <summary>
+      <span class="more-title">ตั้งค่าและทดสอบอีเมล</span>
+      <span class="more-state" id="email-state">ส่งจาก Gmail ของชีต</span>
+    </summary>
+    <form class="pricing-form" id="email-settings-form">
+      <fieldset>
+        <legend>ผู้ส่ง</legend>
+        <label class="field"><span>ชื่อผู้ส่ง</span><input type="text" data-setting="fromName" maxlength="60" autocomplete="off"></label>
+        <label class="field"><span>อีเมลสำหรับตอบกลับ (Reply-To)</span><input type="email" data-setting="replyTo" maxlength="120" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+        <label class="field"><span>ส่งในนามอีเมล (ว่าง = Gmail ของชีต)</span><input type="email" data-setting="from" maxlength="120" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+      </fieldset>
+      <fieldset class="wide">
+        <legend>ข้อความในอีเมล</legend>
+        <label class="field"><span>การรับของด้วยตัวเอง</span><textarea data-setting="pickupText" maxlength="400" rows="2"></textarea></label>
+        <label class="field"><span>การจัดส่ง</span><textarea data-setting="shipText" maxlength="400" rows="2"></textarea></label>
+        <label class="field"><span>ช่องทางติดต่อ</span><input type="text" data-setting="contactLine" maxlength="200" autocomplete="off"></label>
+      </fieldset>
+      <p class="pricing-note" id="email-sender-note">ไม่ต้องใช้ App Password: สคริปต์ส่งจาก Gmail ของเจ้าของชีตเอง "ส่งในนาม" ต้องตั้งใน Gmail &gt; การตั้งค่า &gt; บัญชี ก่อน</p>
+      <button class="btn primary" type="submit" id="email-settings-save">บันทึกการตั้งค่า</button>
+    </form>
+    <form class="pricing-form email-test" id="email-test-form">
+      <fieldset>
+        <legend>ส่งอีเมลทดสอบ (เลือกของเอง ไม่ใช่ออเดอร์จริง)</legend>
+        <label class="field"><span>ส่งไปที่อีเมล</span><input type="email" name="to" maxlength="120" required autocomplete="email" autocapitalize="off" spellcheck="false"></label>
+        <label class="field"><span>ชื่อลูกค้า</span><input type="text" name="name" maxlength="60" value="ลูกค้าทดสอบ"></label>
+        <label class="field"><span>ชั้น</span><input type="text" name="grade" maxlength="10" value="ม.5"></label>
+        <label class="field"><span>ห้อง</span><input type="text" name="room" maxlength="10" value="2"></label>
+      </fieldset>
+      <fieldset>
+        <legend>เสื้อตัวที่ 1</legend>
+        <label class="field"><span>สี</span><select name="color1"><option value="">ไม่เอา</option><option selected>เขียว</option><option>ขาว</option></select></label>
+        <label class="field"><span>ไซซ์</span><select name="size1"><option>S</option><option selected>M</option><option>L</option><option>XL</option><option>2XL</option><option>3XL</option></select></label>
+        <label class="field"><span>ชื่อหลังเสื้อ</span><input type="text" name="name1" maxlength="20" value="RCWD" autocapitalize="characters"></label>
+        <label class="field"><span>เลขหลังเสื้อ</span><input type="text" name="number1" maxlength="3" value="7" inputmode="numeric"></label>
+      </fieldset>
+      <fieldset>
+        <legend>เสื้อตัวที่ 2</legend>
+        <label class="field"><span>สี</span><select name="color2"><option value="" selected>ไม่เอา</option><option>เขียว</option><option>ขาว</option></select></label>
+        <label class="field"><span>ไซซ์</span><select name="size2"><option>S</option><option selected>M</option><option>L</option><option>XL</option><option>2XL</option><option>3XL</option></select></label>
+        <label class="field"><span>ชื่อหลังเสื้อ</span><input type="text" name="name2" maxlength="20" autocapitalize="characters"></label>
+        <label class="field"><span>เลขหลังเสื้อ</span><input type="text" name="number2" maxlength="3" inputmode="numeric"></label>
+      </fieldset>
+      <fieldset>
+        <legend>หมวกและการรับของ</legend>
+        <label class="field"><span>หมวก (ใบ)</span><input type="number" name="caps" min="0" max="10" step="1" value="0" inputmode="numeric"></label>
+        <label class="field"><span>การรับของ</span><select name="ship"><option value="">รับเอง</option><option value="1">จัดส่ง</option></select></label>
+        <label class="field wide-field"><span>ที่อยู่ (ถ้าจัดส่ง)</span><textarea name="address" maxlength="300" rows="2"></textarea></label>
+      </fieldset>
+      <button class="btn primary" type="submit" id="email-test-send">ส่งอีเมลทดสอบ</button>
+    </form>
+  </details>
   <details class="columns cl-columns" id="columns">
     <summary>
       <span class="more-title">เลือกคอลัมน์ในไฟล์ Excel</span>
