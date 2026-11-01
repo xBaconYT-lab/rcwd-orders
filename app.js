@@ -36,7 +36,7 @@
   const FETCH_TIMEOUT_MS = 25000;
   const STANDALONE = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
 
-  const state = { data: null, auth: null, view: '', from: '', to: '', q: '', loadedAt: 0, busy: false, withOrder: false, withQty: false, pricing: null, editing: null, exportPrefs: {}, hideGiven: false, withGiven: false };
+  const state = { data: null, auth: null, view: '', from: '', to: '', q: '', loadedAt: 0, busy: false, withOrder: false, withQty: false, pricing: null, editing: null, exportPrefs: {}, hideGiven: false, withGiven: false, noFrom: 0, noTo: 0 };
   const $ = (id) => document.getElementById(id);
   const on = (id, ev, fn) => { const n = $(id); if (n) n.addEventListener(ev, fn); }; // checklist.html has fewer controls
 
@@ -502,6 +502,7 @@
     return list;
   }
   function clMatches(e) {
+    if (!inOrders(e.no)) return false;
     if (!state.q) return true;
     const q = state.q.toLowerCase();
     if (/^#\d+$/.test(q)) return e.key === q;
@@ -727,7 +728,14 @@
     $('logout').textContent = state.auth ? 'ออกจากระบบ' : 'เข้าสู่ระบบ';
   }
 
+  // ช่วงเลขออเดอร์ (#12 ถึง #40) ใช้กับรายการ ไฟล์ Excel และกำไร แถวที่พิมพ์เองไม่มีเลข จึงไม่ติดเมื่อกรองช่วง
+  function inOrders(no) {
+    if (!state.noFrom && !state.noTo) return true;
+    const n = Number(no);
+    return !!no && (!state.noFrom || n >= state.noFrom) && (!state.noTo || n <= state.noTo);
+  }
   function inRange(row) {
+    if (!inOrders(orderNo(row))) return false;
     if (!state.from && !state.to) return true;
     const d = dayKey(row.time);
     if (!d) return false;
@@ -975,11 +983,16 @@
     return { items: [['สั่งคู่กับเสื้อ', withShirt], ['หมวกอย่างเดียว', total - withShirt]], total: ['รวม (ใบ)', total] };
   }
 
-  function rangeText() {
+  function dateText() {
     if (state.from && state.to) return dayLabel(state.from) + ' – ' + dayLabel(state.to);
     if (state.from) return 'ตั้งแต่ ' + dayLabel(state.from);
     if (state.to) return 'ถึง ' + dayLabel(state.to);
     return 'ทุกวันที่';
+  }
+  function rangeText() {
+    const nos = state.noFrom || state.noTo ? '#' + (state.noFrom || 1) + '–' + (state.noTo ? '#' + state.noTo : 'ล่าสุด') : '';
+    const days = dateText();
+    return nos ? (days === 'ทุกวันที่' ? 'ออเดอร์ ' + nos : days + ' · ' + nos) : days;
   }
 
   function render() {
@@ -1015,8 +1028,8 @@
     const oldNote = $('profit-note');
     if (oldNote && !isProfit) oldNote.remove();
     $('pricing').hidden = !isProfit;
-    $('clear-dates').hidden = !state.from && !state.to;
-    const hasRange = !!(state.from || state.to);
+    const hasRange = !!(state.from || state.to || state.noFrom || state.noTo);
+    $('clear-dates').hidden = !hasRange;
     const rangeLabel = $('range-label');
     rangeLabel.textContent = rangeText();
     rangeLabel.classList.toggle('active', hasRange);
@@ -1106,7 +1119,7 @@
       }
       const blob = window.XlsxLite.build({ sheets });
       const range = CHECKLIST ? (state.hideGiven ? 'ยังไม่แจก' : 'ทั้งหมด') : state.from || state.to ? (state.from || 'เริ่ม') + '_ถึง_' + (state.to || 'ล่าสุด') : 'ทั้งหมด';
-      const found = state.q ? '-ค้นหา' : '';
+      const found = (state.q ? '-ค้นหา' : '') + (state.noFrom || state.noTo ? '-ออเดอร์' + (state.noFrom || 1) + '-' + (state.noTo || 'ล่าสุด') : '');
       saveFile(blob, 'RCWD-' + sheetName + '-' + range + found + '.xlsx');
     } catch (e) {
       toast(e.message || 'สร้างไฟล์ไม่สำเร็จ');
@@ -1378,7 +1391,14 @@
   on('q', 'input', (e) => { state.q = e.target.value.trim(); render(); });
   on('searchbar', 'submit', (e) => { e.preventDefault(); $('q').blur(); });
   on('q-clear', 'click', () => { state.q = ''; $('q').value = ''; render(); $('q').focus(); });
-  const clearDates = () => { state.from = state.to = ''; $('from').value = $('to').value = ''; render(); };
+  const orderBound = (e) => Math.max(0, Math.floor(Number(e.target.value) || 0));
+  on('no-from', 'input', (e) => { state.noFrom = orderBound(e); render(); });
+  on('no-to', 'input', (e) => { state.noTo = orderBound(e); render(); });
+  const clearDates = () => {
+    state.from = state.to = ''; state.noFrom = state.noTo = 0;
+    for (const id of ['from', 'to', 'no-from', 'no-to']) if ($(id)) $(id).value = '';
+    render();
+  };
   on('clear-dates', 'click', clearDates);
   on('empty-reset', 'click', clearDates);
   on('export', 'click', exportExcel);

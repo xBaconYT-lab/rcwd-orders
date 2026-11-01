@@ -27,10 +27,10 @@
 <link rel="preload" href="fonts/prompt-400-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/teko-600-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="fonts/fonts.css">
-<link rel="stylesheet" href="styles.css?v=bec87ed">
+<link rel="stylesheet" href="styles.css?v=32aefb4">
 <script src="config.js"></script>
-<script src="xlsx-lite.js?v=bec87ed" defer></script>
-<script src="app.js?v=bec87ed" defer></script>
+<script src="xlsx-lite.js?v=32aefb4" defer></script>
+<script src="app.js?v=32aefb4" defer></script>
 </head>
 <body data-page="checklist">
 
@@ -92,6 +92,8 @@
   </form>
 
   <div class="cl-bar">
+    <label class="field"><span>ตั้งแต่ออเดอร์ #</span><input type="number" id="no-from" min="1" step="1" inputmode="numeric" placeholder="1"></label>
+    <label class="field"><span>ถึงออเดอร์ #</span><input type="number" id="no-to" min="1" step="1" inputmode="numeric" placeholder="ล่าสุด"></label>
     <label class="given-box cl-hide"><input type="checkbox" id="hide-given"><span>ซ่อนที่แจกแล้ว</span></label>
     <button class="btn primary" type="button" id="export">ดาวน์โหลด Excel</button>
     <button class="btn" type="button" id="email-all" hidden>ส่งอีเมลสรุปทุกคนที่ยังไม่ได้ส่ง</button>
