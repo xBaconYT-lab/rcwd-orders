@@ -27,10 +27,10 @@
 <link rel="preload" href="fonts/prompt-400-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/teko-600-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="fonts/fonts.css">
-<link rel="stylesheet" href="styles.css?v=bec87ed">
+<link rel="stylesheet" href="styles.css?v=32aefb4">
 <script src="config.js"></script>
-<script src="xlsx-lite.js?v=bec87ed" defer></script>
-<script src="app.js?v=bec87ed" defer></script>
+<script src="xlsx-lite.js?v=32aefb4" defer></script>
+<script src="app.js?v=32aefb4" defer></script>
 </head>
 <body>
 
@@ -93,14 +93,16 @@
 
   <details class="more" id="more">
     <summary>
-      <span class="more-title">ช่วงวันที่และดาวน์โหลด</span>
+      <span class="more-title">ช่วงวันที่ เลขออเดอร์ และดาวน์โหลด</span>
       <span class="more-state" id="range-label">ทุกวันที่</span>
     </summary>
     <div class="filters">
       <label class="field"><span>ตั้งแต่วันที่</span><input type="date" id="from"></label>
       <label class="field"><span>ถึงวันที่</span><input type="date" id="to"></label>
+      <label class="field"><span>ตั้งแต่ออเดอร์ #</span><input type="number" id="no-from" min="1" step="1" inputmode="numeric" placeholder="1"></label>
+      <label class="field"><span>ถึงออเดอร์ #</span><input type="number" id="no-to" min="1" step="1" inputmode="numeric" placeholder="ล่าสุด"></label>
       <div class="actions">
-        <button class="btn" type="button" id="clear-dates" hidden>ล้างวันที่</button>
+        <button class="btn" type="button" id="clear-dates" hidden>ล้างช่วง</button>
         <button class="btn primary" type="button" id="export">ดาวน์โหลด Excel</button>
       </div>
       <details class="columns" id="columns">
