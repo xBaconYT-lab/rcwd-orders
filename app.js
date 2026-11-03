@@ -21,8 +21,11 @@
   const MAILER_URL = String(window.RCWD_MAILER_URL || '').trim(); // mailer/ Worker: sends through Gmail SMTP, '' = Apps Script sends
   const DEMO = new URLSearchParams(location.search).has('demo');
   const SESSION_KEY = 'rcwd-session';
-  const CACHE_KEY = 'rcwd-cache';      // the last data pulled, next to the session: the page opens instantly and refreshes behind
   const CHECKLIST = document.body.dataset.page === 'checklist'; // checklist.html: the same app, a different screen
+  // config.js RCWD_CHECKLIST_ROUNDS = [{ label, url }, ...]: the checklist merges several sheets (rounds) into one list
+  const ROUNDS = CHECKLIST && Array.isArray(window.RCWD_CHECKLIST_ROUNDS) && window.RCWD_CHECKLIST_ROUNDS.length > 1 ? window.RCWD_CHECKLIST_ROUNDS : null;
+  const CACHE_KEYS = ['rcwd-cache', 'rcwd-cache-rounds'];
+  const CACHE_KEY = CACHE_KEYS[ROUNDS ? 1 : 0]; // the last data pulled, next to the session: the page opens instantly and refreshes behind
   const UI_KEY = CHECKLIST ? 'rcwd-ui-checklist' : 'rcwd-ui'; // the last category opened (no personal data), so the app reopens where it was
   const PRICING_KEY = 'rcwd-pricing';  // prices and costs used by the profit view (no personal data)
   const EXPORT_KEY = 'rcwd-export';    // which columns to leave out of the Excel file, per category (no personal data)
@@ -123,8 +126,8 @@
   }
   function writeCache(json) {
     try {
-      sessionStorage.removeItem(CACHE_KEY);
-      localStorage.removeItem(CACHE_KEY);
+      // null (logout, dead session) drops the merged checklist copy too
+      for (const k of json ? [CACHE_KEY] : CACHE_KEYS) { sessionStorage.removeItem(k); localStorage.removeItem(k); }
       if (json) store().setItem(CACHE_KEY, JSON.stringify({ savedAt: Date.now(), data: json }));
     } catch (e) { /* storage full or private mode: the next load just waits for the sheet */ }
   }
@@ -199,6 +202,20 @@
     if (!json || typeof json !== 'object') throw new Error('ข้อมูลที่ได้กลับมาอ่านไม่ได้ ลองใหม่อีกครั้ง');
     if (!json.ok) throw Object.assign(new Error(text(json.error) || 'ดึงข้อมูลไม่สำเร็จ'), { auth: true, code: text(json.code) });
     return json;
+  }
+
+  // Merged checklist: ask every round's sheet at once with the same sign-in. Each row gets src = its round's index,
+  // because order numbers repeat across rounds (#5 in round 1 and #5 in round 2 are different people).
+  // shortcut: password sign-in only (neither sheet has Auth.gs); per-round tokens if Auth.gs is ever installed.
+  async function callRounds(body) {
+    const parts = await Promise.all(ROUNDS.map((r) => callApi(body, { url: r.url }).catch((err) => {
+      throw Object.assign(new Error(text(r.label) + ': ' + err.message), { auth: err.auth, code: err.code });
+    })));
+    // email stays for round 1 only, and only where this page's emails go to round 1's sheet (rcwd, not rcwd2)
+    const emailed = ROUNDS[0].url === API_URL && Array.isArray(parts[0].emailed) ? parts[0].emailed : null;
+    const out = Object.assign({}, parts[0], { token: undefined, emailed, shirts: [], caps: [], shipping: [] });
+    parts.forEach((p, src) => ['shirts', 'caps', 'shipping'].forEach((k) => list(p[k]).forEach((r) => out[k].push(Object.assign({}, r, { src })))));
+    return out;
   }
 
   const list = (v) => (Array.isArray(v) ? v.filter((r) => r && typeof r === 'object') : []);
@@ -339,6 +356,7 @@
   // subtracts the unit costs and the extra costs. A row with a numeric `amount` from the sheet (a newer
   // script could send what was actually paid) wins over the bundle estimate for its order.
   const orderNo = (row) => { const m = /^#(\d+)/.exec(text(row.order)); return m ? m[1] : null; };
+  const orderId = (row) => { const no = orderNo(row); return no ? (row.src || 0) + '|' + no : null; }; // "round|number": unique across rounds
   const is3xl = (row) => /^3\s*xl$/i.test(text(row.size).trim());
   function computeProfit() {
     const P = state.pricing || PRICING_DEFAULTS;
@@ -470,8 +488,8 @@
     let manual = 0;
     const entryFor = (row) => {
       const no = orderNo(row);
-      const key = no ? no : 'manual:' + (manual++);
-      if (!byNo.has(key)) byNo.set(key, { no, key: no ? '#' + no : '', who: '', grade: '', room: '', items: [], rows: [], i: byNo.size, ship: false });
+      const key = no ? orderId(row) : 'manual:' + (manual++);
+      if (!byNo.has(key)) byNo.set(key, { no, id: no ? key : '', src: row.src || 0, key: no ? '#' + no : '', who: '', grade: '', room: '', items: [], rows: [], i: byNo.size, ship: false });
       return byNo.get(key);
     };
     d.shirts.forEach((r) => {
@@ -488,7 +506,7 @@
       e.items.push({ kind: 'cap', label: (text(r.product).match(/หมวก[^+·]*/) || ['หมวก'])[0].trim() + (qtyOf(r) > 1 ? ' × ' + qtyOf(r) + ' ใบ' : ' 1 ใบ'), row: r });
       e.rows.push({ kind: 'cap', row: r });
     });
-    (d.shipping || []).forEach((r) => { const no = orderNo(r); if (no && byNo.has(no)) byNo.get(no).ship = true; });
+    (d.shipping || []).forEach((r) => { const id = orderId(r); if (id && byNo.has(id)) byNo.get(id).ship = true; });
     const list = Array.from(byNo.values());
     list.forEach((e) => {
       const fake = { grade: e.grade, room: e.room };
@@ -510,9 +528,9 @@
   }
   function orderGivenCell(e) {
     if (!canEdit() || !e.key) return el('td', { class: 'given' });
-    const label = pendingGiven.has(e.key) ? 'กำลังบันทึก…' : e.state === 'all' ? 'แจกแล้ว' : e.state === 'some' ? 'แจกบางส่วน' : 'ยังไม่แจก';
-    const box = el('label', { class: 'given-box' + (e.state === 'all' ? ' on' : e.state === 'some' ? ' some' : '') + (pendingGiven.has(e.key) ? ' pending' : '') }, [
-      el('input', { type: 'checkbox', 'data-given-order': e.key, checked: e.state === 'all' ? '' : null, 'aria-label': 'แจกแล้ว ' + e.key }),
+    const label = pendingGiven.has(e.id) ? 'กำลังบันทึก…' : e.state === 'all' ? 'แจกแล้ว' : e.state === 'some' ? 'แจกบางส่วน' : 'ยังไม่แจก';
+    const box = el('label', { class: 'given-box' + (e.state === 'all' ? ' on' : e.state === 'some' ? ' some' : '') + (pendingGiven.has(e.id) ? ' pending' : '') }, [
+      el('input', { type: 'checkbox', 'data-given-order': e.id, checked: e.state === 'all' ? '' : null, 'aria-label': 'แจกแล้ว ' + e.key + (ROUNDS ? ' ' + text(ROUNDS[e.src].label) : '') }),
       el('span', { text: label }),
     ]);
     if (e.state === 'some') box.querySelector('input').indeterminate = true;
@@ -520,12 +538,24 @@
   }
   // ติ๊กแล้วเห็นผลทันที: จดไว้ในคิว แล้วส่งให้ชีตรวมกันเป็นคำขอเดียวเบื้องหลัง (หลายออเดอร์ = ส่งครั้งเดียว)
   // ระหว่างรอแถวขึ้น "กำลังบันทึก…" ถ้าชีตตอบไม่ผ่านจะดีดกลับค่าเดิมและบอก ข้อมูลที่ดึงใหม่ระหว่างรอไม่ทับค่าที่ติ๊กไว้
-  const pendingGiven = new Map(); // order key -> { value, before: [{row, given}] }
+  const pendingGiven = new Map(); // order id ("round|number") -> { value, before: [{row, given}] }
   let flushTimer = 0;
   let flushing = false;
-  function rowsOfOrder(key) {
-    const no = key.slice(1);
-    return state.data.shirts.concat(state.data.caps).filter((r) => orderNo(r) === no);
+  function rowsOfOrder(id) {
+    return state.data.shirts.concat(state.data.caps).filter((r) => orderId(r) === id);
+  }
+  // one request per round's sheet: { action: 'update', kind: 'orders', changes: [{ order: '#9', given }] }
+  function sendGiven(batch, opts) {
+    const bySrc = new Map();
+    batch.forEach((c) => {
+      const [src, no] = c.id.split('|');
+      if (!bySrc.has(src)) bySrc.set(src, []);
+      bySrc.get(src).push({ order: '#' + no, given: c.given });
+    });
+    return Promise.all(Array.from(bySrc, ([src, changes]) =>
+      callApi(authBody({ action: 'update', kind: 'orders', changes }), Object.assign({ url: ROUNDS ? ROUNDS[src].url : API_URL }, opts)).then((json) => {
+        if (!json.updated) throw new Error('สคริปต์ของชีตยังไม่รองรับการติ๊กหลายออเดอร์: อัปเดต updateFromWeb_ ใน Code.gs ตาม README');
+      })));
   }
   function applyPending() {
     pendingGiven.forEach((p, key) => rowsOfOrder(key).forEach((r) => { r.given = p.value; }));
@@ -549,19 +579,18 @@
   async function flushGiven() {
     if (flushing || !pendingGiven.size || !state.auth) return;
     flushing = true;
-    const batch = Array.from(pendingGiven.entries()).map(([order, p]) => ({ order, given: p.value }));
+    const batch = Array.from(pendingGiven.entries()).map(([id, p]) => ({ id, given: p.value }));
     try {
-      const json = await callApi(authBody({ action: 'update', kind: 'orders', changes: batch }));
-      if (!json.updated) throw new Error('สคริปต์ของชีตยังไม่รองรับการติ๊กหลายออเดอร์: อัปเดต updateFromWeb_ ใน Code.gs ตาม README');
-      batch.forEach((c) => { const p = pendingGiven.get(c.order); if (p && p.value === c.given) pendingGiven.delete(c.order); });
+      await sendGiven(batch);
+      batch.forEach((c) => { const p = pendingGiven.get(c.id); if (p && p.value === c.given) pendingGiven.delete(c.id); });
       writeCache(stripForCache(Object.assign({}, state.data)));
       render();
       toast('บันทึกลงชีตแล้ว ' + batch.length + ' ออเดอร์', 1200);
     } catch (err) {
       // ดีดกลับค่าก่อนติ๊ก แล้วบอก (ค่าที่ชีตรับไปแล้วส่วนหนึ่งจะกลับมาเองตอนดึงข้อมูลครั้งถัดไป)
       batch.forEach((c) => {
-        const p = pendingGiven.get(c.order);
-        if (p && p.value === c.given) { p.before.forEach((b) => { b.row.given = b.given; }); pendingGiven.delete(c.order); }
+        const p = pendingGiven.get(c.id);
+        if (p && p.value === c.given) { p.before.forEach((b) => { b.row.given = b.given; }); pendingGiven.delete(c.id); }
       });
       render();
       if (err.auth && err.code === 'session') showLogin(err.message);
@@ -574,8 +603,8 @@
   // ปิดหน้าทั้งที่ยังมีติ๊กค้าง: ส่งทันทีแบบ keepalive
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden' && pendingGiven.size && !flushing && state.auth && state.auth.mode !== 'demo') {
-      const batch = Array.from(pendingGiven.entries()).map(([order, p]) => ({ order, given: p.value }));
-      try { callApi(authBody({ action: 'update', kind: 'orders', changes: batch }), { keepalive: true }).catch(() => {}); } catch (e) { /* ignore */ }
+      const batch = Array.from(pendingGiven.entries()).map(([id, p]) => ({ id, given: p.value }));
+      try { sendGiven(batch, { keepalive: true }).catch(() => {}); } catch (e) { /* ignore */ }
     }
   });
   // ---------- ส่งอีเมลสรุปออเดอร์ (Email.gs) ----------
@@ -597,7 +626,7 @@
     const d = state.data;
     const all = key === 'all';
     const resend = !all && d.emailed.includes(key);
-    const left = all ? checklistOrders().filter((e) => e.key && !d.emailed.includes(e.key)).length : 0;
+    const left = all ? checklistOrders().filter((e) => e.key && !e.src && !d.emailed.includes(e.key)).length : 0;
     const ask = all ? 'ส่งอีเมลสรุปออเดอร์ให้ลูกค้า ' + left + ' ออเดอร์ที่ยังไม่ได้ส่ง?\n(ส่งแล้วยกเลิกไม่ได้)'
       : resend ? 'ออเดอร์ ' + key + ' ส่งอีเมลไปแล้ว ส่งซ้ำอีกครั้ง?' : 'ส่งอีเมลสรุปออเดอร์ ' + key + ' ให้ลูกค้า?';
     if (!window.confirm(ask)) return;
@@ -699,7 +728,8 @@
           el('span', { class: 'dot ' + (it.kind === 'shirt' ? (SWATCH[text(it.row.color)] || 'other') : 'cap'), 'aria-hidden': 'true' }),
           it.label,
         ])))]),
-        e.key ? el('td', { class: 'order' }, [e.key, emailButton(e.key)]) : el('td', { class: 'order' }, [el('span', { class: 'manual', text: 'เพิ่มเอง' })]),
+        e.key ? el('td', { class: 'order' }, [e.key, ROUNDS ? el('span', { class: 'round-tag', text: text(ROUNDS[e.src].label) }) : null, e.src ? null : emailButton(e.key)])
+          : el('td', { class: 'order' }, [el('span', { class: 'manual', text: 'เพิ่มเอง' })]),
         orderGivenCell(e),
       ]));
     });
@@ -707,7 +737,7 @@
     if ($('email-panel')) $('email-panel').hidden = !d.emailed;
     const allBtn = $('email-all');
     if (allBtn) {
-      const left = d.emailed ? all.filter((e) => e.key && !d.emailed.includes(e.key)).length : 0;
+      const left = d.emailed ? all.filter((e) => e.key && !e.src && !d.emailed.includes(e.key)).length : 0;
       allBtn.hidden = !d.emailed;
       allBtn.disabled = emailBusy.size > 0 || !left;
       allBtn.textContent = emailBusy.has('all') ? 'กำลังส่งอีเมล…' : left ? 'ส่งอีเมลสรุปทุกคนที่ยังไม่ได้ส่ง (' + left + ')' : 'ส่งอีเมลครบทุกออเดอร์แล้ว';
@@ -1144,15 +1174,16 @@
     {
       if (view.kind === 'checklist') {
         // หนึ่งแถวต่อคนสั่ง (ออเดอร์) ตามที่เห็นบนหน้าเช็กลิสต์
-        header = ['ลำดับ', 'ชั้น/ห้อง', 'ชื่อคนสั่ง', 'ออเดอร์', 'เสื้อ', 'หมวก', 'ของทั้งหมด', 'เบอร์ติดต่อ', 'จัดส่ง', 'แจกแล้ว'];
+        // merged rounds: a "รอบ" column, since #5 can be in both rounds
+        header = ['ลำดับ', 'ชั้น/ห้อง', 'ชื่อคนสั่ง', 'ออเดอร์'].concat(ROUNDS ? ['รอบ'] : [], ['เสื้อ', 'หมวก', 'ของทั้งหมด', 'เบอร์ติดต่อ', 'จัดส่ง', 'แจกแล้ว']);
         body = rows.map((e, i) => {
           const shirts = e.items.filter((it) => it.kind === 'shirt').map((it) => it.label.replace(/^Jersey /, '')).join(' / ');
           const caps = e.items.filter((it) => it.kind === 'cap').reduce((t, it) => t + qtyOf(it.row), 0);
           const phone = (e.rows.map((x) => text(x.row.phone)).filter(Boolean)[0]) || '';
-          return [i + 1, e.cls || '', e.who, e.key || 'เพิ่มเอง', shirts, caps ? caps + ' ใบ' : '', e.items.map((it) => it.label).join(' / '), phone,
-            e.ship ? 'จัดส่ง' : '', e.state === 'all' ? 'แจกแล้ว' : e.state === 'some' ? 'แจกบางส่วน' : ''];
+          return [i + 1, e.cls || '', e.who, e.key || 'เพิ่มเอง'].concat(ROUNDS ? [text(ROUNDS[e.src].label)] : [], [shirts, caps ? caps + ' ใบ' : '',
+            e.items.map((it) => it.label).join(' / '), phone, e.ship ? 'จัดส่ง' : '', e.state === 'all' ? 'แจกแล้ว' : e.state === 'some' ? 'แจกบางส่วน' : '']);
         });
-        widths = [7, 10, 22, 10, 40, 10, 50, 14, 8, 12];
+        widths = [7, 10, 22, 10].concat(ROUNDS ? [12] : [], [40, 10, 50, 14, 8, 12]);
       } else if (view.kind === 'profit') {
         header = []; body = []; widths = [];
       } else if (view.kind === 'shirt') {
@@ -1256,7 +1287,8 @@
   }
 
   async function signIn(username, password) {
-    const json = DEMO ? await demoData() : await callApi({ action: 'login', username, password });
+    const body = { action: 'login', username, password };
+    const json = DEMO ? await demoData() : ROUNDS ? await callRounds(body) : await callApi(body);
     adopt(json, { mode: 'password', username, password });
   }
 
@@ -1265,6 +1297,7 @@
     if (!a) throw Object.assign(new Error('เซสชันหมดอายุ เข้าสู่ระบบอีกครั้ง'), { auth: true, code: 'session' });
     const json = a.mode === 'demo' ? await demoData()
       : a.mode === 'token' ? await callApi({ action: 'refresh', token: a.token })
+      : ROUNDS ? await callRounds({ username: a.username, password: a.password })
       : await callApi({ username: a.username, password: a.password });
     adopt(json, a);
   }

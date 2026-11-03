@@ -1,0 +1,7 @@
+# rcwd2.leamm.com (รอบเก็บตก): ส่งทุกคำขอต่อไปที่ rcwd.leamm.com (GitHub Pages) หน้าเว็บจึงอัปเดตตาม repo นี้เอง
+# config.js เลือกชีตตามโดเมน ติดตั้งครั้งเดียว: cd rcwd2 && npx wrangler deploy (สร้าง DNS ของ rcwd2.leamm.com ให้เอง)
+name = "rcwd2"
+main = "index.js"
+compatibility_date = "2026-10-01"
+workers_dev = false
+routes = [{ pattern = "rcwd2.leamm.com", custom_domain = true }]

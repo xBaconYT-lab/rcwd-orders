@@ -252,7 +252,7 @@ table.checklist .dot.green { background: #1f7a55; border-color: #1f7a55; }
 table.checklist .dot.white { background: #ffffff; border-color: #b9c9c0; }
 table.checklist .dot.cap { border-radius: 3px; background: var(--ink); border-color: var(--ink); }
 table.checklist .dot.other { background: var(--line); }
-.ship-tag { display: inline-block; margin-left: 8px; padding: 1px 8px; font-size: 0.75rem; font-weight: 500; color: var(--muted); border: 1px dashed var(--line); border-radius: 999px; }
+.ship-tag, .round-tag { display: inline-block; margin-left: 8px; padding: 1px 8px; font-size: 0.75rem; font-weight: 500; color: var(--muted); border: 1px dashed var(--line); border-radius: 999px; }
 .given-box.some { border-style: dashed; color: var(--ink); }
 .given-box.pending { opacity: 0.75; }
 .given-box.pending span { font-style: normal; color: var(--muted); }
