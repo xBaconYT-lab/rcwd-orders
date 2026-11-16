@@ -222,6 +222,7 @@ input[type="search"]::-webkit-search-results-button { -webkit-appearance: none; 
   color: var(--ink); font-size: 0.9375rem;
 }
 .readonly-bar .btn { white-space: normal; }
+.readonly-bar.warn { border-style: solid; border-color: var(--danger); background: var(--danger-soft); }
 /* ช่องติ๊ก "แจกแล้ว" */
 .given-box {
   display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px 0 8px;

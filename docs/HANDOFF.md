@@ -53,6 +53,10 @@ Repo layout (all live on `main`, deployed by GitHub Pages to rcwd.leamm.com):
 
 - Phone / IG on the sheet: per order from caps rows (`phone`, `social`), shirt rows if the script sends `phone`/`social`, else the shipping row's `contact` ("phone\nIG"). **Pending Code.gs edit** so shirt-only orders get them too: in `slipRowInfo_` add `phone: String(r[5] || ''), social: String(r[6] || ''),` and in `handleWeb_` inside `shirts.push({…})` add `phone: m.phone || '', social: m.social || '',`.
 
+### Sign-in robustness (password-only scripts)
+- `callApi` marks an error `auth` only for real sign-in problems (codes invalid/locked/session/no_users or password/session wording). Any other `ok:false` from a script (timeouts inside Google, "ดึงข้อมูลไม่สำเร็จ: …") is a hiccup and never signs anyone out; before this, one slow answer during the 30 s background sync threw users back to the login.
+- Merged checklist: `callRounds(body, prev)` uses `Promise.allSettled`. A wrong password in any round, or every round failing, refuses the sign-in (error names the round). A single round with a hiccup keeps its rows from the previous pull (marked "old data") or is flagged as missing ("รายการยังไม่ครบ") with a red banner; printing is blocked while a whole round is missing; incomplete data is not cached. `FETCH_TIMEOUT_MS` is 40 s (Apps Script cold starts).
+
 ### Data flow / performance decisions
 - `callApi(body)` POSTs a JSON string (no custom headers → no CORS preflight) to the Apps Script `/exec`.
 - Token mode (needs Auth.gs): `{action:'login'|'refresh'|'logout'|'update', token}`; token in `sessionStorage` (`rcwd-session`), or `localStorage` when running as a home-screen app. Old password mode: `{username, password, …}`, password only in memory.
