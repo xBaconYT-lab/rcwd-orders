@@ -39,7 +39,7 @@
   const FETCH_TIMEOUT_MS = 25000;
   const STANDALONE = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
 
-  const state = { data: null, auth: null, view: '', from: '', to: '', q: '', loadedAt: 0, busy: false, withOrder: false, withQty: false, pricing: null, editing: null, exportPrefs: {}, hideGiven: false, withGiven: false, noFrom: 0, noTo: 0 };
+  const state = { data: null, auth: null, view: '', from: '', to: '', q: '', loadedAt: 0, busy: false, withOrder: false, withQty: false, pricing: null, editing: null, exportPrefs: {}, hideGiven: false, withGiven: false, noFrom: 0, noTo: 0, printPaged: false, printNoShip: false };
   const $ = (id) => document.getElementById(id);
   const on = (id, ev, fn) => { const n = $(id); if (n) n.addEventListener(ev, fn); }; // checklist.html has fewer controls
 
@@ -135,11 +135,11 @@
     try {
       const v = JSON.parse(localStorage.getItem(UI_KEY) || 'null');
       if (!v || typeof v.view !== 'string') return null;
-      return { view: v.view, hideGiven: v.hideGiven === true };
+      return { view: v.view, hideGiven: v.hideGiven === true, printPaged: v.printPaged === true, printNoShip: v.printNoShip === true };
     } catch (e) { return null; }
   }
   function writeUi(v) {
-    try { localStorage.setItem(UI_KEY, JSON.stringify(v)); } catch (e) { /* ignore */ }
+    try { localStorage.setItem(UI_KEY, JSON.stringify(Object.assign({ printPaged: state.printPaged, printNoShip: state.printNoShip }, v))); } catch (e) { /* ignore */ }
   }
   function readPricing() {
     const out = Object.assign({}, PRICING_DEFAULTS);
@@ -274,6 +274,7 @@
       { order: '#9', time: day(6), name: 'ป้า ตัวอย่าง', phone: '0833333333', address: 'คอนโดตัวอย่าง ห้อง 1201\nซอยตัวอย่าง 3',
         items: 'Jersey ขาว · M · FLAG · 63\nJersey เขียว · 3XL · STAND · 70\nหมวก RCWD 1 ใบ', buyer: 'ตัวอย่าง สาม\nม.3 ห้อง 4', contact: '0800000102\n@demo3', shipped: false, tracking: '', slip: '' },
     ];
+    if (ROUNDS) [shirts, caps, shipping].forEach((rows) => rows.forEach((r) => { const n = orderNo(r); if (n && Number(n) % 4 === 3) r.src = 1; })); // demo: #3, #7 … belong to the second round
     return Promise.resolve({ ok: true, demo: true, updatedAt: new Date().toISOString(), sheetUrl: '', onlyVerified: true,
       sizes: ['S', 'M', 'L', 'XL', '2XL', '3XL'], colors: ['เขียว', 'ขาว'], capLabel: 'หมวก RCWD', shipLabel: 'จัดส่ง', shirts, caps, shipping });
   }
@@ -526,6 +527,101 @@
     if (/^#\d+$/.test(q)) return e.key === q;
     return [e.who, e.cls, e.key, e.grade, e.room].concat(e.items.map((it) => it.label)).some((v) => text(v).toLowerCase().includes(q));
   }
+  // ---------- ใบเซ็นชื่อรับของ A4 (พิมพ์ หรือ "บันทึกเป็น PDF" จากกล่องพิมพ์ของเบราว์เซอร์) ----------
+  // หนึ่งแถว = หนึ่งออเดอร์ มีรายการของทุกชิ้นพร้อมช่อง ☐ ให้ติ๊กตอนส่งมอบ และช่องลายเซ็นผู้รับ จัดกลุ่มตามชั้น/ห้อง
+  // ข้อมูลมาจากรายการบนหน้าจอ (ทุกรอบรวมกัน ตามตัวกรองที่เลือก) สร้างในเบราว์เซอร์นี้ ไม่ส่งไปที่ไหน
+  const buddhistFmt = new Intl.DateTimeFormat('th-TH-u-ca-buddhist', { timeZone: tz, day: '2-digit', month: '2-digit', year: 'numeric' });
+  const clockFmt = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  const printClassTitle = (e) => (isFinite(e.ck[0]) ? 'ชั้น ม.' + e.ck[0] + (isFinite(e.ck[1]) ? ' ห้อง ' + e.ck[1] : '') : 'ไม่ระบุชั้น/ห้อง');
+  function printList() {
+    return checklistOrders().filter(clMatches)
+      .filter((e) => !(state.hideGiven && e.state === 'all'))
+      .filter((e) => !(state.printNoShip && e.ship));
+  }
+  const printCount = (es) => ({
+    orders: es.length,
+    shirts: es.reduce((t, e) => t + e.items.filter((it) => it.kind === 'shirt').length, 0),
+    caps: es.reduce((t, e) => t + e.items.filter((it) => it.kind === 'cap').reduce((n, it) => n + qtyOf(it.row), 0), 0),
+  });
+  const printCountText = (c) => c.orders + ' ออเดอร์' + (c.shirts ? ' · เสื้อ ' + c.shirts + ' ตัว' : '') + (c.caps ? ' · หมวก ' + c.caps + ' ใบ' : '');
+  function printItemText(it) {
+    if (it.kind === 'cap') return it.label;
+    const r = it.row;
+    return ['เสื้อ' + (text(r.color) || ''), text(r.size), text(r.name), text(r.number) ? 'เลข ' + text(r.number) : ''].filter(Boolean).join(' · ');
+  }
+  function buildPrintSheet(list) {
+    const now = new Date();
+    const stamp = 'พิมพ์เมื่อวันที่ ' + buddhistFmt.format(now) + ' เวลา ' + clockFmt.format(now);
+    const filters = [
+      state.noFrom || state.noTo ? 'ออเดอร์ #' + (state.noFrom || 1) + '–' + (state.noTo ? '#' + state.noTo : 'ล่าสุด') : '',
+      state.q ? 'ค้นหา "' + state.q + '"' : '',
+      state.hideGiven ? 'เฉพาะที่ยังไม่แจก' : '',
+      state.printNoShip ? 'ไม่รวมออเดอร์จัดส่ง' : '',
+    ].filter(Boolean);
+    const out = [el('header', { class: 'ps-doc' }, [
+      el('h1', { text: 'ใบเซ็นรับของ RCWD Jersey 2026' }),
+      el('p', { class: 'ps-sub', text: 'คณะราชาวดี · ' + (ROUNDS ? ROUNDS.map((r) => text(r.label)).join(' + ') : 'รายการที่สลิปผ่านแล้ว') + (state.data.demo ? ' · ตัวอย่างข้อมูลสมมติ' : '') }),
+      el('p', { class: 'ps-sub', text: 'ทั้งหมด ' + printCountText(printCount(list)) + (filters.length ? ' (' + filters.join(' · ') + ')' : '') }),
+      el('p', { class: 'ps-printed', text: stamp }),
+      el('p', { class: 'ps-rule', text: 'ผู้รับต้องเซ็นชื่อรับของทุกครั้ง ตรวจของให้ครบตามรายการ แล้วติ๊กช่อง ☐ หน้ารายการก่อนเซ็นชื่อ' }),
+    ])];
+    if (!list.length) out.push(el('p', { class: 'ps-sub', text: 'ไม่มีรายการที่ตรงกับตัวกรอง' }));
+    const groups = [];
+    list.forEach((e) => {
+      const title = printClassTitle(e);
+      if (!groups.length || groups[groups.length - 1].title !== title) groups.push({ title, es: [] });
+      groups[groups.length - 1].es.push(e);
+    });
+    groups.forEach((g) => {
+      const head = el('thead', null, [
+        el('tr', { class: 'ps-title' }, [el('th', { colspan: '6' }, [el('span', { class: 'ps-stamp', text: stamp }), 'RCWD Jersey 2026 · ใบเซ็นรับของ'])]),
+        el('tr', { class: 'ps-head' }, [el('th', { colspan: '6' }, [g.title, el('small', { text: printCountText(printCount(g.es)) })])]),
+        el('tr', { class: 'ps-cols' }, ['เลขที่', 'ออเดอร์', 'ชื่อ-นามสกุล', 'ของที่ต้องรับ', 'ลายเซ็นผู้รับ', 'วันที่รับ'].map((h) => el('th', { scope: 'col', text: h }))),
+      ]);
+      const rows = g.es.map((e, i) => {
+        let sign;
+        if (e.state === 'all') sign = el('td', { class: 'ps-sign ps-muted', text: 'แจกแล้ว' });
+        else if (e.ship) sign = el('td', { class: 'ps-sign ps-muted', text: 'จัดส่งทางไปรษณีย์' });
+        else sign = el('td', { class: 'ps-sign' }, e.state === 'some' ? [el('span', { class: 'ps-note', text: 'แจกบางส่วน' })] : []);
+        return el('tr', null, [
+          el('td', { class: 'ps-no', text: String(i + 1) }),
+          el('td', { class: 'ps-order' }, [e.key || 'เพิ่มเอง', ROUNDS ? el('span', { class: 'ps-round', text: text(ROUNDS[e.src].label) }) : null]),
+          el('td', { class: 'ps-name', text: e.who || '-' }),
+          el('td', { class: 'ps-items' }, [el('ul', null, e.items.map((it) => el('li', null, [el('span', { class: 'ps-box', 'aria-hidden': 'true' }), printItemText(it)])))]),
+          sign,
+          el('td', { class: 'ps-date' }),
+        ]);
+      });
+      const cols = ['no', 'order', 'name', 'items', 'sign', 'date'].map((c) => el('col', { class: 'ps-c-' + c }));
+      out.push(el('section', { class: 'ps-class' + (g.es.length <= 8 ? ' ps-keep' : '') }, [
+        el('table', { class: 'ps-table' }, [el('colgroup', null, cols), head, el('tbody', null, rows)]),
+      ]));
+    });
+    return out;
+  }
+  const baseTitle = document.title;
+  function fillPrintSheet() {
+    const root = $('print-sheet');
+    if (!root || !state.data || !CHECKLIST) return;
+    root.classList.toggle('ps-paged', state.printPaged);
+    root.replaceChildren(...buildPrintSheet(printList()));
+    document.title = 'ใบเซ็นรับของ RCWD Jersey 2026 ' + dayKeyFmt.format(new Date()); // the default file name of "Save as PDF"
+  }
+  function clearPrintSheet() {
+    const root = $('print-sheet');
+    if (root) root.replaceChildren();
+    document.title = baseTitle;
+  }
+  // ⌘P / Ctrl+P on this page prints the sheet too, not the screen
+  window.addEventListener('beforeprint', fillPrintSheet);
+  window.addEventListener('afterprint', clearPrintSheet);
+  on('print-sheet-btn', 'click', () => {
+    if (!printList().length) { toast('ไม่มีรายการให้พิมพ์ตามตัวกรองที่เลือก'); return; }
+    window.print();
+  });
+  on('print-paged', 'change', (e) => { state.printPaged = e.target.checked; writeUi({ view: state.view, hideGiven: state.hideGiven }); });
+  on('print-noship', 'change', (e) => { state.printNoShip = e.target.checked; writeUi({ view: state.view, hideGiven: state.hideGiven }); render(); });
+
   function orderGivenCell(e) {
     if (!canEdit() || !e.key) return el('td', { class: 'given' });
     const label = pendingGiven.has(e.id) ? 'กำลังบันทึก…' : e.state === 'all' ? 'แจกแล้ว' : e.state === 'some' ? 'แจกบางส่วน' : 'ยังไม่แจก';
@@ -686,6 +782,7 @@
     $('q-clear').hidden = !state.q;
     const hideBox = $('hide-given');
     if (hideBox) hideBox.checked = state.hideGiven;
+    if ($('print-paged')) { $('print-paged').checked = state.printPaged; $('print-noship').checked = state.printNoShip; }
     const shown = all.filter(clMatches).filter((e) => !(state.hideGiven && e.state === 'all'));
     $('status').textContent = state.q ? (shown.length ? 'พบ ' + shown.length + ' ออเดอร์' : 'ไม่พบ "' + state.q + '"') : '';
     $('run').replaceChildren(
@@ -694,6 +791,11 @@
       ...(some ? [runItem('แจกบางส่วน', some)] : []),
       runItem('รวม (ออเดอร์)', all.length, 'total'),
     );
+    if ($('print-sheet-btn')) {
+      const toPrint = printList().length;
+      $('print-sheet-btn').textContent = 'พิมพ์ใบเซ็นชื่อ A4 (' + toPrint + ' ออเดอร์)';
+      $('print-sheet-btn').disabled = toPrint === 0;
+    }
     const exportBtn = $('export');
     if (exportBtn) {
       exportBtn.textContent = 'ดาวน์โหลด Excel (' + shown.length + ' ออเดอร์' + (state.q ? ' ที่ค้นพบ' : state.hideGiven ? ' ที่ยังไม่แจก' : '') + ')';
@@ -1594,7 +1696,7 @@
   (async () => {
     forgetLegacy();
     const ui = readUi();
-    if (ui) { state.view = ui.view; state.hideGiven = ui.hideGiven; }
+    if (ui) { state.view = ui.view; state.hideGiven = ui.hideGiven; state.printPaged = ui.printPaged; state.printNoShip = ui.printNoShip; }
     if (DEMO) {
       try { await signIn('', ''); } catch (err) { showLogin(err.message); }
       return;

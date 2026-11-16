@@ -47,6 +47,10 @@ Repo layout (all live on `main`, deployed by GitHub Pages to rcwd.leamm.com):
 - One **แจกแล้ว** tick per order → marks every row of that order. Instant on screen, queued, sent as ONE request `{ action: 'update', kind: 'orders', changes: [{order:'#9', given:true}, …] }` (debounced 350 ms, keepalive flush on tab hide). "กำลังบันทึก…" while pending; revert + toast on failure. Partial state shows "แจกบางส่วน" (indeterminate box).
 - Hide-given toggle, search, counts, Excel export (one row per customer, column picker).
 
+### A4 sign sheet (checklist)
+- `พิมพ์ใบเซ็นชื่อ A4` button + `beforeprint`/`afterprint` handlers in `app.js` (`buildPrintSheet`, `fillPrintSheet`): builds `#print-sheet` from the same filtered list the checklist shows (both rounds merged), grouped by class; print CSS at the end of `styles.css` (`@page` A4, `body[data-page="checklist"]` only). Options `printPaged` (one class per page) and `printNoShip` are stored in `rcwd-ui-checklist`. Sample: `docs/sign-sheet-sample.pdf`.
+- Test recipe: Playwright, open `/checklist.html?demo`, dispatch `beforeprint`, `emulateMedia({media:'print'})`, `page.pdf({preferCSSPageSize:true})`, rasterize with `pdftoppm`.
+
 ### Data flow / performance decisions
 - `callApi(body)` POSTs a JSON string (no custom headers → no CORS preflight) to the Apps Script `/exec`.
 - Token mode (needs Auth.gs): `{action:'login'|'refresh'|'logout'|'update', token}`; token in `sessionStorage` (`rcwd-session`), or `localStorage` when running as a home-screen app. Old password mode: `{username, password, …}`, password only in memory.
