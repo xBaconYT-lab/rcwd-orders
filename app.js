@@ -39,7 +39,7 @@
   const FETCH_TIMEOUT_MS = 25000;
   const STANDALONE = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
 
-  const state = { data: null, auth: null, view: '', from: '', to: '', q: '', loadedAt: 0, busy: false, withOrder: false, withQty: false, pricing: null, editing: null, exportPrefs: {}, hideGiven: false, withGiven: false, noFrom: 0, noTo: 0, printPaged: false, printNoShip: false };
+  const state = { data: null, auth: null, view: '', from: '', to: '', q: '', loadedAt: 0, busy: false, withOrder: false, withQty: false, pricing: null, editing: null, exportPrefs: {}, hideGiven: false, withGiven: false, noFrom: 0, noTo: 0, printPaged: false, printNoShip: false, printContact: true };
   const $ = (id) => document.getElementById(id);
   const on = (id, ev, fn) => { const n = $(id); if (n) n.addEventListener(ev, fn); }; // checklist.html has fewer controls
 
@@ -135,11 +135,11 @@
     try {
       const v = JSON.parse(localStorage.getItem(UI_KEY) || 'null');
       if (!v || typeof v.view !== 'string') return null;
-      return { view: v.view, hideGiven: v.hideGiven === true, printPaged: v.printPaged === true, printNoShip: v.printNoShip === true };
+      return { view: v.view, hideGiven: v.hideGiven === true, printPaged: v.printPaged === true, printNoShip: v.printNoShip === true, printContact: v.printContact !== false };
     } catch (e) { return null; }
   }
   function writeUi(v) {
-    try { localStorage.setItem(UI_KEY, JSON.stringify(Object.assign({ printPaged: state.printPaged, printNoShip: state.printNoShip }, v))); } catch (e) { /* ignore */ }
+    try { localStorage.setItem(UI_KEY, JSON.stringify(Object.assign({ printPaged: state.printPaged, printNoShip: state.printNoShip, printContact: state.printContact }, v))); } catch (e) { /* ignore */ }
   }
   function readPricing() {
     const out = Object.assign({}, PRICING_DEFAULTS);
@@ -249,7 +249,7 @@
       ['นักเรียน ฏ', 'ม.1', '2'], ['นักเรียน ฐ', 'ม.2', '5']];
     const shirts = names.map((n, i) => ({
       order: orders[i], time: day(3 + (i % 5)), color: i % 3 === 0 ? 'ขาว' : 'เขียว', size: sizes[i], name: n,
-      buyer: buyers[i][0], grade: buyers[i][1], room: buyers[i][2],
+      buyer: buyers[i][0], grade: buyers[i][1], room: buyers[i][2], phone: '08' + String(10000000 + i * 111111).slice(0, 8), social: i % 3 === 0 ? '' : '@demo' + (i + 20),
       number: i === 5 ? '1234' : String((i * 7) % 99).padStart(i % 4 === 0 ? 2 : 1, '0'), piece: 1, slip: '', given: i % 4 === 1,
     }));
     shirts.push({ order: '', time: '', color: 'เขียว', size: 'M', name: 'STAFF', number: '0', slip: '' });
@@ -490,13 +490,15 @@
     const entryFor = (row) => {
       const no = orderNo(row);
       const key = no ? orderId(row) : 'manual:' + (manual++);
-      if (!byNo.has(key)) byNo.set(key, { no, id: no ? key : '', src: row.src || 0, key: no ? '#' + no : '', who: '', grade: '', room: '', items: [], rows: [], i: byNo.size, ship: false });
+      if (!byNo.has(key)) byNo.set(key, { no, id: no ? key : '', src: row.src || 0, key: no ? '#' + no : '', who: '', grade: '', room: '', phone: '', social: '', items: [], rows: [], i: byNo.size, ship: false });
       return byNo.get(key);
     };
     d.shirts.forEach((r) => {
       const e = entryFor(r);
       if (!e.who && text(r.buyer)) e.who = text(r.buyer);
       if (!e.grade && text(r.grade)) { e.grade = text(r.grade); e.room = text(r.room); }
+      if (!e.phone && text(r.phone)) e.phone = text(r.phone);
+      if (!e.social && text(r.social)) e.social = text(r.social);
       e.items.push({ kind: 'shirt', label: ['Jersey ' + (text(r.color) || ''), text(r.size), text(r.name), text(r.number)].filter(Boolean).join(' · '), row: r });
       e.rows.push({ kind: 'shirt', row: r });
     });
@@ -504,10 +506,21 @@
       const e = entryFor(r);
       if (!e.who && text(r.name)) e.who = text(r.name);
       if (!e.grade && text(r.grade)) { e.grade = text(r.grade); e.room = text(r.room); }
+      if (!e.phone && text(r.phone)) e.phone = text(r.phone);
+      if (!e.social && text(r.social)) e.social = text(r.social);
       e.items.push({ kind: 'cap', label: (text(r.product).match(/หมวก[^+·]*/) || ['หมวก'])[0].trim() + (qtyOf(r) > 1 ? ' × ' + qtyOf(r) + ' ใบ' : ' 1 ใบ'), row: r });
       e.rows.push({ kind: 'cap', row: r });
     });
-    (d.shipping || []).forEach((r) => { const id = orderId(r); if (id && byNo.has(id)) byNo.get(id).ship = true; });
+    (d.shipping || []).forEach((r) => {
+      const id = orderId(r);
+      if (!id || !byNo.has(id)) return;
+      const e = byNo.get(id);
+      e.ship = true;
+      // the shipping tab keeps the buyer's contact as "phone\nIG": use it when the shirt/cap rows had none
+      text(r.contact).split('\n').map((x) => x.trim()).filter(Boolean).forEach((line) => {
+        if (/^[\d+\-\s()]{8,}$/.test(line)) { if (!e.phone) e.phone = line; } else if (!e.social) e.social = line;
+      });
+    });
     const list = Array.from(byNo.values());
     list.forEach((e) => {
       const fake = { grade: e.grade, room: e.room };
@@ -525,7 +538,7 @@
     if (!state.q) return true;
     const q = state.q.toLowerCase();
     if (/^#\d+$/.test(q)) return e.key === q;
-    return [e.who, e.cls, e.key, e.grade, e.room].concat(e.items.map((it) => it.label)).some((v) => text(v).toLowerCase().includes(q));
+    return [e.who, e.cls, e.key, e.grade, e.room, e.phone, e.social].concat(e.items.map((it) => it.label)).some((v) => text(v).toLowerCase().includes(q));
   }
   // ---------- ใบเซ็นชื่อรับของ A4 (พิมพ์ หรือ "บันทึกเป็น PDF" จากกล่องพิมพ์ของเบราว์เซอร์) ----------
   // หนึ่งแถว = หนึ่งออเดอร์ มีรายการของทุกชิ้นพร้อมช่อง ☐ ให้ติ๊กตอนส่งมอบ และช่องลายเซ็นผู้รับ จัดกลุ่มตามชั้น/ห้อง
@@ -586,7 +599,11 @@
         return el('tr', null, [
           el('td', { class: 'ps-no', text: String(i + 1) }),
           el('td', { class: 'ps-order' }, [e.key || 'เพิ่มเอง', ROUNDS ? el('span', { class: 'ps-round', text: text(ROUNDS[e.src].label) }) : null]),
-          el('td', { class: 'ps-name', text: e.who || '-' }),
+          el('td', { class: 'ps-name' }, [
+            e.who || '-',
+            state.printContact && e.phone ? el('span', { class: 'ps-contact', text: 'โทร ' + e.phone }) : null,
+            state.printContact && e.social ? el('span', { class: 'ps-contact', text: e.social.slice(0, 40) }) : null,
+          ]),
           el('td', { class: 'ps-items' }, [el('ul', null, e.items.map((it) => el('li', null, [el('span', { class: 'ps-box', 'aria-hidden': 'true' }), printItemText(it)])))]),
           sign,
           el('td', { class: 'ps-date' }),
@@ -620,6 +637,7 @@
     window.print();
   });
   on('print-paged', 'change', (e) => { state.printPaged = e.target.checked; writeUi({ view: state.view, hideGiven: state.hideGiven }); });
+  on('print-contact', 'change', (e) => { state.printContact = e.target.checked; writeUi({ view: state.view, hideGiven: state.hideGiven }); });
   on('print-noship', 'change', (e) => { state.printNoShip = e.target.checked; writeUi({ view: state.view, hideGiven: state.hideGiven }); render(); });
 
   function orderGivenCell(e) {
@@ -782,7 +800,7 @@
     $('q-clear').hidden = !state.q;
     const hideBox = $('hide-given');
     if (hideBox) hideBox.checked = state.hideGiven;
-    if ($('print-paged')) { $('print-paged').checked = state.printPaged; $('print-noship').checked = state.printNoShip; }
+    if ($('print-paged')) { $('print-paged').checked = state.printPaged; $('print-noship').checked = state.printNoShip; $('print-contact').checked = state.printContact; }
     const shown = all.filter(clMatches).filter((e) => !(state.hideGiven && e.state === 'all'));
     $('status').textContent = state.q ? (shown.length ? 'พบ ' + shown.length + ' ออเดอร์' : 'ไม่พบ "' + state.q + '"') : '';
     $('run').replaceChildren(
@@ -1277,15 +1295,15 @@
       if (view.kind === 'checklist') {
         // หนึ่งแถวต่อคนสั่ง (ออเดอร์) ตามที่เห็นบนหน้าเช็กลิสต์
         // merged rounds: a "รอบ" column, since #5 can be in both rounds
-        header = ['ลำดับ', 'ชั้น/ห้อง', 'ชื่อคนสั่ง', 'ออเดอร์'].concat(ROUNDS ? ['รอบ'] : [], ['เสื้อ', 'หมวก', 'ของทั้งหมด', 'เบอร์ติดต่อ', 'จัดส่ง', 'แจกแล้ว']);
+        header = ['ลำดับ', 'ชั้น/ห้อง', 'ชื่อคนสั่ง', 'ออเดอร์'].concat(ROUNDS ? ['รอบ'] : [], ['เสื้อ', 'หมวก', 'ของทั้งหมด', 'เบอร์ติดต่อ', 'IG / Line', 'จัดส่ง', 'แจกแล้ว']);
         body = rows.map((e, i) => {
           const shirts = e.items.filter((it) => it.kind === 'shirt').map((it) => it.label.replace(/^Jersey /, '')).join(' / ');
           const caps = e.items.filter((it) => it.kind === 'cap').reduce((t, it) => t + qtyOf(it.row), 0);
-          const phone = (e.rows.map((x) => text(x.row.phone)).filter(Boolean)[0]) || '';
+          const phone = e.phone;
           return [i + 1, e.cls || '', e.who, e.key || 'เพิ่มเอง'].concat(ROUNDS ? [text(ROUNDS[e.src].label)] : [], [shirts, caps ? caps + ' ใบ' : '',
-            e.items.map((it) => it.label).join(' / '), phone, e.ship ? 'จัดส่ง' : '', e.state === 'all' ? 'แจกแล้ว' : e.state === 'some' ? 'แจกบางส่วน' : '']);
+            e.items.map((it) => it.label).join(' / '), phone, e.social, e.ship ? 'จัดส่ง' : '', e.state === 'all' ? 'แจกแล้ว' : e.state === 'some' ? 'แจกบางส่วน' : '']);
         });
-        widths = [7, 10, 22, 10].concat(ROUNDS ? [12] : [], [40, 10, 50, 14, 8, 12]);
+        widths = [7, 10, 22, 10].concat(ROUNDS ? [12] : [], [40, 10, 50, 14, 20, 8, 12]);
       } else if (view.kind === 'profit') {
         header = []; body = []; widths = [];
       } else if (view.kind === 'shirt') {
@@ -1696,7 +1714,7 @@
   (async () => {
     forgetLegacy();
     const ui = readUi();
-    if (ui) { state.view = ui.view; state.hideGiven = ui.hideGiven; state.printPaged = ui.printPaged; state.printNoShip = ui.printNoShip; }
+    if (ui) { state.view = ui.view; state.hideGiven = ui.hideGiven; state.printPaged = ui.printPaged; state.printNoShip = ui.printNoShip; state.printContact = ui.printContact; }
     if (DEMO) {
       try { await signIn('', ''); } catch (err) { showLogin(err.message); }
       return;

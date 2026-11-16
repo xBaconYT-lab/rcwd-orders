@@ -556,13 +556,14 @@ table.profit td.neg, .run dd.neg { color: var(--danger); }
   .ps-table .ps-cols th { background: #e6e6e6; font-size: 9.5pt; font-weight: 700; text-align: center; }
   .ps-c-no { width: 11mm; }
   .ps-c-order { width: 17mm; }
-  .ps-c-name { width: 36mm; }
+  .ps-c-name { width: 42mm; }
   .ps-c-sign { width: 40mm; }
   .ps-c-date { width: 17mm; }
   .ps-no { text-align: center; }
   .ps-order { text-align: center; font-weight: 600; }
   .ps-round { display: block; font-size: 7.5pt; font-weight: 400; color: #444; }
-  .ps-name { font-weight: 600; }
+  .ps-name { font-weight: 600; overflow-wrap: anywhere; }
+  .ps-contact { display: block; font-size: 8pt; font-weight: 400; color: #222; line-height: 1.3; }
   .ps-items ul { list-style: none; margin: 0; padding: 0; }
   .ps-items li { font-size: 9.5pt; line-height: 1.5; }
   .ps-box { display: inline-block; width: 3mm; height: 3mm; margin-right: 1.6mm; border: 0.3mm solid #000; vertical-align: -0.4mm; }
