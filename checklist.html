@@ -27,10 +27,10 @@
 <link rel="preload" href="fonts/prompt-400-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/teko-600-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="fonts/fonts.css">
-<link rel="stylesheet" href="styles.css?v=a477f5a">
-<script src="config.js?v=a477f5a"></script>
-<script src="xlsx-lite.js?v=a477f5a" defer></script>
-<script src="app.js?v=a477f5a" defer></script>
+<link rel="stylesheet" href="styles.css?v=f3d3a4c">
+<script src="config.js?v=f3d3a4c"></script>
+<script src="xlsx-lite.js?v=f3d3a4c" defer></script>
+<script src="app.js?v=f3d3a4c" defer></script>
 </head>
 <body data-page="checklist">
 
@@ -96,8 +96,12 @@
     <label class="field"><span>ถึงออเดอร์ #</span><input type="number" id="no-to" min="1" step="1" inputmode="numeric" placeholder="ล่าสุด"></label>
     <label class="given-box cl-hide"><input type="checkbox" id="hide-given"><span>ซ่อนที่แจกแล้ว</span></label>
     <button class="btn primary" type="button" id="export">ดาวน์โหลด Excel</button>
+    <button class="btn" type="button" id="print-sheet-btn">พิมพ์ใบเซ็นชื่อ A4</button>
+    <label class="given-box"><input type="checkbox" id="print-paged"><span>ใบเซ็นชื่อ: แยกหน้าตามชั้น/ห้อง</span></label>
+    <label class="given-box"><input type="checkbox" id="print-noship"><span>ไม่รวมออเดอร์จัดส่ง</span></label>
+    <label class="given-box"><input type="checkbox" id="print-contact"><span>ใบเซ็นชื่อ: แสดงเบอร์โทร/IG</span></label>
     <button class="btn" type="button" id="email-all" hidden>ส่งอีเมลสรุปทุกคนที่ยังไม่ได้ส่ง</button>
-    <span class="cl-note">หนึ่งแถว = หนึ่งคนสั่ง รวมทุกชิ้นที่ต้องให้ ติ๊กเมื่อส่งของครบแล้ว บันทึกลงชีตทันที</span>
+    <span class="cl-note">หนึ่งแถว = หนึ่งคนสั่ง รวมทุกชิ้นที่ต้องให้ ติ๊กเมื่อส่งของครบแล้ว บันทึกลงชีตทันที ใบเซ็นชื่อพิมพ์ตามตัวกรองที่เลือกอยู่ (ช่วงออเดอร์ ค้นหา ซ่อนที่แจกแล้ว) กดพิมพ์แล้วเลือก "บันทึกเป็น PDF"</span>
   </div>
   <details class="more pricing email-panel" id="email-panel" hidden>
     <summary>
@@ -188,6 +192,8 @@
     </span>
   </footer>
 </div>
+
+<div class="print-sheet" id="print-sheet" aria-hidden="true"></div>
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
