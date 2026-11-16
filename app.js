@@ -36,7 +36,7 @@
     shipCostPerOrder: 0, otherCost: 0,
   };
   const LEGACY_KEYS = ['rcwd-auth']; // older versions kept the password here
-  const FETCH_TIMEOUT_MS = 25000;
+  const FETCH_TIMEOUT_MS = 40000; // Apps Script can take 20-30 s on a cold start
   const STANDALONE = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
 
   const state = { data: null, auth: null, view: '', from: '', to: '', q: '', loadedAt: 0, busy: false, withOrder: false, withQty: false, pricing: null, editing: null, exportPrefs: {}, hideGiven: false, withGiven: false, noFrom: 0, noTo: 0, printPaged: false, printNoShip: false, printContact: true };
@@ -200,21 +200,40 @@
     let json;
     try { json = await res.json(); } catch (e) { throw new Error('ข้อมูลที่ได้กลับมาอ่านไม่ได้ ลองใหม่อีกครั้ง'); }
     if (!json || typeof json !== 'object') throw new Error('ข้อมูลที่ได้กลับมาอ่านไม่ได้ ลองใหม่อีกครั้ง');
-    if (!json.ok) throw Object.assign(new Error(text(json.error) || 'ดึงข้อมูลไม่สำเร็จ'), { auth: true, code: text(json.code) });
+    if (!json.ok) {
+      const message = text(json.error) || 'ดึงข้อมูลไม่สำเร็จ';
+      const code = text(json.code);
+      // Only a real sign-in problem (wrong password, locked out, expired session) is "auth". Any other answer from the
+      // script (a timeout inside Google, "ดึงข้อมูลไม่สำเร็จ: ...", a failed save) is a hiccup and must not sign anyone out.
+      const auth = ['invalid', 'locked', 'session', 'no_users'].indexOf(code) !== -1 || /ชื่อผู้ใช้|รหัสผ่าน|ผิดหลายครั้ง|เซสชัน|หมดอายุ/.test(message);
+      throw Object.assign(new Error(message), { auth, code });
+    }
     return json;
   }
 
   // Merged checklist: ask every round's sheet at once with the same sign-in. Each row gets src = its round's index,
   // because order numbers repeat across rounds (#5 in round 1 and #5 in round 2 are different people).
   // shortcut: password sign-in only (neither sheet has Auth.gs); per-round tokens if Auth.gs is ever installed.
-  async function callRounds(body) {
-    const parts = await Promise.all(ROUNDS.map((r) => callApi(body, { url: r.url }).catch((err) => {
-      throw Object.assign(new Error(text(r.label) + ': ' + err.message), { auth: err.auth, code: err.code });
-    })));
+  async function callRounds(body, prev) {
+    const settled = await Promise.allSettled(ROUNDS.map((r) => callApi(body, { url: r.url })));
+    const label = (i) => text(ROUNDS[i].label);
+    const failed = [];
+    settled.forEach((x, i) => { if (x.status === 'rejected') failed.push({ i, err: x.reason || new Error('ไม่ทราบสาเหตุ') }); });
+    // a wrong password (or every sheet failing) is a real failure of the sign-in; a single sheet having a hiccup is not
+    const fatal = failed.find((f) => f.err.auth) || (failed.length === ROUNDS.length ? failed[0] : null);
+    if (fatal) throw Object.assign(new Error(label(fatal.i) + ': ' + fatal.err.message), { auth: fatal.err.auth, code: fatal.err.code });
+    const firstOk = settled.findIndex((x) => x.status === 'fulfilled');
+    const parts = settled.map((x) => (x.status === 'fulfilled' ? x.value : {}));
+    const roundIssues = failed.map((f) => ({ label: label(f.i), reason: f.err.message, stale: !!(prev && prev.shirts) }));
     // email stays for round 1 only, and only where this page's emails go to round 1's sheet (rcwd, not rcwd2)
-    const emailed = ROUNDS[0].url === API_URL && Array.isArray(parts[0].emailed) ? parts[0].emailed : null;
-    const out = Object.assign({}, parts[0], { token: undefined, emailed, shirts: [], caps: [], shipping: [] });
-    parts.forEach((p, src) => ['shirts', 'caps', 'shipping'].forEach((k) => list(p[k]).forEach((r) => out[k].push(Object.assign({}, r, { src })))));
+    const emailed = !settled[0] || settled[0].status !== 'fulfilled' ? null : ROUNDS[0].url === API_URL && Array.isArray(parts[0].emailed) ? parts[0].emailed : null;
+    const out = Object.assign({}, parts[firstOk], { token: undefined, emailed, shirts: [], caps: [], shipping: [], roundIssues });
+    parts.forEach((p, src) => ['shirts', 'caps', 'shipping'].forEach((k) => {
+      const failedHere = failed.some((f) => f.i === src);
+      // keep the failed round's rows from the previous pull (shown as "old data") instead of making them vanish
+      const rows = failedHere ? (prev && Array.isArray(prev[k]) ? prev[k].filter((r) => (r.src || 0) === src) : []) : list(p[k]);
+      rows.forEach((r) => out[k].push(Object.assign({}, r, { src })));
+    }));
     return out;
   }
 
@@ -233,6 +252,7 @@
       caps: list(json.caps),
       shipping: Array.isArray(json.shipping) ? list(json.shipping) : null,
       emailed: Array.isArray(json.emailed) ? json.emailed.map(text) : null, // null = สคริปต์ยังไม่มีปุ่มส่งอีเมล
+      roundIssues: Array.isArray(json.roundIssues) ? json.roundIssues : [], // merged checklist: rounds whose sheet did not answer
     };
   }
 
@@ -576,6 +596,7 @@
       el('p', { class: 'ps-sub', text: 'คณะราชาวดี · ' + (ROUNDS ? ROUNDS.map((r) => text(r.label)).join(' + ') : 'รายการที่สลิปผ่านแล้ว') + (state.data.demo ? ' · ตัวอย่างข้อมูลสมมติ' : '') }),
       el('p', { class: 'ps-sub', text: 'ทั้งหมด ' + printCountText(printCount(list)) + (filters.length ? ' (' + filters.join(' · ') + ')' : '') }),
       el('p', { class: 'ps-printed', text: stamp }),
+      ...(((state.data.roundIssues) || []).length ? [el('p', { class: 'ps-rule', text: '⚠ รายการอาจไม่ครบ: ' + state.data.roundIssues.map((i) => i.label + ' ดึงข้อมูลไม่ได้' + (i.stale ? ' (ใช้ข้อมูลเดิม)' : '')).join(', ') })] : []),
       el('p', { class: 'ps-rule', text: 'ผู้รับต้องเซ็นชื่อรับของทุกครั้ง ตรวจของให้ครบตามรายการ แล้วติ๊กช่อง ☐ หน้ารายการก่อนเซ็นชื่อ' }),
     ])];
     if (!list.length) out.push(el('p', { class: 'ps-sub', text: 'ไม่มีรายการที่ตรงกับตัวกรอง' }));
@@ -796,6 +817,7 @@
     const some = all.filter((e) => e.state === 'some').length;
     $('switch').hidden = true;
     renderReadonlyBar();
+    renderRoundWarning();
     $('q').placeholder = 'ชื่อ ชั้น/ห้อง เสื้อ หมวก หรือ #ออเดอร์';
     $('q-clear').hidden = !state.q;
     const hideBox = $('hide-given');
@@ -811,8 +833,10 @@
     );
     if ($('print-sheet-btn')) {
       const toPrint = printList().length;
+      const incomplete = ((state.data.roundIssues) || []).some((i) => !i.stale); // never print a sheet that is missing a whole round
       $('print-sheet-btn').textContent = 'พิมพ์ใบเซ็นชื่อ A4 (' + toPrint + ' ออเดอร์)';
-      $('print-sheet-btn').disabled = toPrint === 0;
+      $('print-sheet-btn').disabled = toPrint === 0 || incomplete;
+      $('print-sheet-btn').title = incomplete ? 'ยังดึงข้อมูลบางรอบไม่ได้ รายการไม่ครบ กด "ลองอีกครั้ง" ก่อน' : '';
     }
     const exportBtn = $('export');
     if (exportBtn) {
@@ -935,6 +959,22 @@
   const canEdit = () => state.withOrder; // ไม่ได้เข้าสู่ระบบ: ปุ่ม/ช่องติ๊กยังอยู่ กดแล้วพาไปเข้าสู่ระบบก่อน
   const needLogin = (why) => { showLogin(why, { forget: false }); return true; };
   // แถบบอกสถานะดูอย่างเดียว (เปิดจากข้อมูลที่เคยดึงไว้ ยังไม่ได้เข้าสู่ระบบ)
+  // merged checklist: a sheet that did not answer is flagged, never silently left out
+  function renderRoundWarning() {
+    let bar = $('round-warning');
+    const issues = (state.data && state.data.roundIssues) || [];
+    if (!issues.length) { if (bar) bar.remove(); return; }
+    if (!bar) {
+      bar = el('div', { id: 'round-warning', class: 'readonly-bar warn', role: 'alert' });
+      document.querySelector('.panel').before(bar);
+    }
+    const retry = el('button', { type: 'button', class: 'btn small', text: 'ลองอีกครั้ง' });
+    retry.addEventListener('click', () => (state.auth ? doRefresh() : needLogin('')));
+    bar.replaceChildren(
+      el('span', { text: issues.map((i) => i.label + ' ดึงไม่ได้ (' + i.reason + ') ' + (i.stale ? '— แสดงข้อมูลเดิมของรอบนี้' : '— รายการยังไม่ครบ')).join(' · ') }),
+      retry,
+    );
+  }
   function renderReadonlyBar() {
     let bar = $('readonly-bar');
     if (state.auth) { if (bar) bar.remove(); return; }
@@ -1392,7 +1432,7 @@
       state.auth = { mode: 'password', username: auth.username, password: auth.password };
       writeSession(null);
     }
-    if (!DEMO) writeCache(stripForCache(json));
+    if (!DEMO && !(json.roundIssues && json.roundIssues.some((i) => !i.stale))) writeCache(stripForCache(json));
     show('app');
     if (!state.editing) render(); // a background pull must not wipe what is being typed; closing the editor renders
   }
@@ -1408,7 +1448,7 @@
 
   async function signIn(username, password) {
     const body = { action: 'login', username, password };
-    const json = DEMO ? await demoData() : ROUNDS ? await callRounds(body) : await callApi(body);
+    const json = DEMO ? await demoData() : ROUNDS ? await callRounds(body, state.data) : await callApi(body);
     adopt(json, { mode: 'password', username, password });
   }
 
@@ -1417,7 +1457,7 @@
     if (!a) throw Object.assign(new Error('เซสชันหมดอายุ เข้าสู่ระบบอีกครั้ง'), { auth: true, code: 'session' });
     const json = a.mode === 'demo' ? await demoData()
       : a.mode === 'token' ? await callApi({ action: 'refresh', token: a.token })
-      : ROUNDS ? await callRounds({ username: a.username, password: a.password })
+      : ROUNDS ? await callRounds({ username: a.username, password: a.password }, state.data)
       : await callApi({ username: a.username, password: a.password });
     adopt(json, a);
   }
